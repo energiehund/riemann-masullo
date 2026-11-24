@@ -903,6 +903,90 @@ theorem integral_im_line_secondDeriv_eq_zero (hh : DifferentiableOn ℂ h U) (hU
 
 end Carleson
 
+/-! ### Bounds for the product `B g` on the strip -/
+
+section ProductBounds
+
+variable {α : ℝ} {B g : ℂ → ℂ}
+
+/-- The derivative of the product on the open strip. -/
+theorem deriv_mul_strip (hB : DifferentiableOn ℂ B {z : ℂ | |z.re| < α})
+    (hg : DifferentiableOn ℂ g {z : ℂ | |z.re| < α}) {z : ℂ} (hz : |z.re| < α) :
+    HasDerivAt (fun z ↦ B z * g z) (deriv B z * g z + B z * deriv g z) z := by
+  have hn := (isOpen_strip α).mem_nhds hz
+  exact ((hB.differentiableAt hn).hasDerivAt).mul ((hg.differentiableAt hn).hasDerivAt)
+
+/-- The second derivative of the product on the open strip:
+`(Bg)'' = B'' g + 2 B' g' + B g''`. -/
+theorem deriv_deriv_mul_strip (hB : DifferentiableOn ℂ B {z : ℂ | |z.re| < α})
+    (hg : DifferentiableOn ℂ g {z : ℂ | |z.re| < α}) {z : ℂ} (hz : |z.re| < α) :
+    deriv (deriv fun z ↦ B z * g z) z =
+      deriv (deriv B) z * g z + 2 * (deriv B z * deriv g z) + B z * deriv (deriv g) z := by
+  have hU := isOpen_strip α
+  have hn := hU.mem_nhds hz
+  have heq : deriv (fun z ↦ B z * g z) =ᶠ[𝓝 z] fun z ↦ deriv B z * g z + B z * deriv g z := by
+    filter_upwards [hn] with y hy
+    exact (deriv_mul_strip hB hg hy).deriv
+  rw [heq.deriv_eq]
+  have hB' := ((hB.deriv hU).differentiableAt hn).hasDerivAt
+  have hg' := ((hg.deriv hU).differentiableAt hn).hasDerivAt
+  have hB0 := (hB.differentiableAt hn).hasDerivAt
+  have hg0 := (hg.differentiableAt hn).hasDerivAt
+  rw [((hB'.fun_mul hg0).fun_add (hB0.fun_mul hg')).deriv]
+  ring
+
+variable {C M : ℝ}
+
+/-- Bounds for `B g` and its first two derivatives. -/
+theorem norm_mul_strip_bounds (hB : DifferentiableOn ℂ B {z : ℂ | |z.re| < α})
+    (hg : DifferentiableOn ℂ g {z : ℂ | |z.re| < α})
+    (hB0 : ∀ z : ℂ, |z.re| < α → ‖B z‖ ≤ 1)
+    (hB1 : ∀ z : ℂ, |z.re| < α → ‖deriv B z‖ ≤ C)
+    (hB2 : ∀ z : ℂ, |z.re| < α → ‖deriv (deriv B) z‖ ≤ C / (α - |z.re|))
+    (hg0 : ∀ z : ℂ, |z.re| < α → ‖g z‖ ≤ M / (1 + z.im ^ 2))
+    (hg1 : ∀ z : ℂ, |z.re| < α → ‖deriv g z‖ ≤ M / (1 + z.im ^ 2))
+    (hg2 : ∀ z : ℂ, |z.re| < α → ‖deriv (deriv g) z‖ ≤ M / (1 + z.im ^ 2))
+    {z : ℂ} (hz : |z.re| < α) :
+    ‖B z * g z‖ ≤ M / (1 + z.im ^ 2) ∧
+      ‖deriv (fun z ↦ B z * g z) z‖ ≤ (C + 1) * (M / (1 + z.im ^ 2)) ∧
+      ‖deriv (deriv fun z ↦ B z * g z) z‖ ≤
+        (C / (α - |z.re|) + 2 * C + 1) * (M / (1 + z.im ^ 2)) := by
+  have hb := hB0 z hz
+  have hgz := hg0 z hz
+  have hg1z := hg1 z hz
+  have hg2z := hg2 z hz
+  have hb1 := hB1 z hz
+  have hb2 := hB2 z hz
+  have hD : 0 ≤ M / (1 + z.im ^ 2) := (norm_nonneg _).trans hgz
+  have hC : 0 ≤ C := (norm_nonneg _).trans hb1
+  refine ⟨?_, ?_, ?_⟩
+  · rw [norm_mul]
+    calc ‖B z‖ * ‖g z‖ ≤ 1 * (M / (1 + z.im ^ 2)) := mul_le_mul hb hgz (norm_nonneg _) zero_le_one
+      _ = _ := one_mul _
+  · rw [(deriv_mul_strip hB hg hz).deriv]
+    calc ‖deriv B z * g z + B z * deriv g z‖ ≤ ‖deriv B z‖ * ‖g z‖ + ‖B z‖ * ‖deriv g z‖ := by
+          refine (norm_add_le _ _).trans ?_
+          rw [norm_mul, norm_mul]
+      _ ≤ C * (M / (1 + z.im ^ 2)) + 1 * (M / (1 + z.im ^ 2)) := by
+          gcongr
+      _ = (C + 1) * (M / (1 + z.im ^ 2)) := by ring
+  · rw [deriv_deriv_mul_strip hB hg hz]
+    have hd : 0 < α - |z.re| := by linarith
+    calc ‖deriv (deriv B) z * g z + 2 * (deriv B z * deriv g z) + B z * deriv (deriv g) z‖
+        ≤ ‖deriv (deriv B) z‖ * ‖g z‖ + 2 * (‖deriv B z‖ * ‖deriv g z‖) +
+            ‖B z‖ * ‖deriv (deriv g) z‖ := by
+          refine (norm_add_le _ _).trans (add_le_add ((norm_add_le _ _).trans ?_) ?_)
+          · rw [norm_mul, norm_mul, norm_mul, Complex.norm_two]
+          · rw [norm_mul]
+      _ ≤ C / (α - |z.re|) * (M / (1 + z.im ^ 2)) + 2 * (C * (M / (1 + z.im ^ 2))) +
+            1 * (M / (1 + z.im ^ 2)) := by
+          gcongr
+      _ = (C / (α - |z.re|) + 2 * C + 1) * (M / (1 + z.im ^ 2)) := by ring
+
+end ProductBounds
+
+/-! ### Carleson's formula on the strip, assembled -/
+
 /-- **Carleson's formula on the strip, with the weight `(α − |σ|)^{1−s}`.** Let `B` be bounded by
 one on the open strip `S = {|Re z| < α}`, with defect `1 − ‖B‖² ≤ C (α − |Re z|)`, `‖B'‖ ≤ C` and
 `‖B''‖ ≤ C/(α − |Re z|)`, and let `g`, `g'`, `g''` decay like `1/(1 + t²)`. Then
