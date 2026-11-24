@@ -9,6 +9,7 @@ public import Mathlib.Analysis.SpecialFunctions.Integrability.Basic
 public import Mathlib.MeasureTheory.Integral.IntegralEqImproper
 public import Mathlib.MeasureTheory.Integral.Prod
 import Mathlib.Analysis.SpecialFunctions.ImproperIntegrals
+import Mathlib.Analysis.SpecialFunctions.Trigonometric.DerivHyp
 import Mathlib.MeasureTheory.Integral.DominatedConvergence
 import Mathlib.Analysis.Complex.RealDeriv
 public import RiemannMasullo.ForMathlib.Analysis.Complex.Blaschke
@@ -1523,5 +1524,49 @@ theorem stripCarleson {α s : ℝ} (hα : 0 < α) (hs0 : 0 ≤ s) (hs1 : s < 1) 
   simp only [E, w] at hfin
   rw [hfin]
   ring
+
+/-- **Carleson's formula for a finite strip Blaschke product** (Step A of the argument on #7405).
+For zeros `ρ j` in the open strip, `B = stripBlaschke α ρ` and `g` with `g, g', g''` decaying
+like `1/(1 + t²)` on the open strip, the weighted Dirichlet integrals satisfy
+`∬ (‖(Bg)'‖² − ‖g'‖²) w = ∫ |g|² dν_B` with the positive measure
+`ν_B = ½(1 − s)α^{−s}(1 − |B|²) dt` on `Re = 0` plus `¼ s(1 − s)(1 − |B|²)(α − |σ|)^{−s−1} dσ dt`. -/
+theorem stripBlaschke_carleson {α s : ℝ} (hα : 0 < α) (hs0 : 0 ≤ s) (hs1 : s < 1) {n : ℕ}
+    (ρ : Fin n → ℂ) (hρ : ∀ j, |(ρ j).re| < α) {g : ℂ → ℂ}
+    (hg : DifferentiableOn ℂ g {z : ℂ | |z.re| < α}) {M : ℝ}
+    (hg0 : ∀ z : ℂ, |z.re| < α → ‖g z‖ ≤ M / (1 + z.im ^ 2))
+    (hg1 : ∀ z : ℂ, |z.re| < α → ‖deriv g z‖ ≤ M / (1 + z.im ^ 2))
+    (hg2 : ∀ z : ℂ, |z.re| < α → ‖deriv (deriv g) z‖ ≤ M / (1 + z.im ^ 2)) :
+    ∫ σ in (-α)..α, (∫ t : ℝ, (‖deriv (fun z ↦ stripBlaschke α ρ z * g z) (σ + t * I)‖ ^ 2 -
+        ‖deriv g (σ + t * I)‖ ^ 2)) * (α - |σ|) ^ (1 - s) =
+      (1 - s) / 2 * α ^ (-s) * (∫ t : ℝ, (1 - ‖stripBlaschke α ρ (t * I)‖ ^ 2) * ‖g (t * I)‖ ^ 2) +
+        s * (1 - s) / 4 * ∫ σ in (-α)..α,
+          (∫ t : ℝ, (1 - ‖stripBlaschke α ρ (σ + t * I)‖ ^ 2) * ‖g (σ + t * I)‖ ^ 2) *
+            (α - |σ|) ^ (-s - 1) := by
+  obtain ⟨C₀, hC₀, hdef⟩ := stripBlaschke_defect_bounds hα ρ hρ
+  obtain ⟨C₁, hC₁, hd1⟩ := stripBlaschke_deriv_bound hα ρ hρ
+  obtain ⟨C₂, hC₂, hd2⟩ := stripBlaschke_deriv2_bound hα ρ hρ
+  set C := max C₀ (max C₁ C₂)
+  have hz (z : ℂ) : z = (z.re : ℂ) + z.im * I := (Complex.re_add_im z).symm
+  have hdz (z : ℂ) (hz' : |z.re| < α) := by
+    have h := hdef z.re z.im hz'.le
+    rw [← hz z] at h
+    exact h
+  refine stripCarleson hα hs0 hs1 (C := C) (M := M)
+    (fun z hz' ↦ (hd1 z hz').1.differentiableWithinAt) hg ?_ ?_ ?_ ?_ hg0 hg1 hg2
+  · intro z hz'
+    have := (hdz z hz').1
+    nlinarith [norm_nonneg (stripBlaschke α ρ z)]
+  · intro z hz'
+    have h2 := (hdz z hz').2
+    have hcosh : 1 ≤ Real.cosh (π / (2 * α) * z.im) := Real.one_le_cosh _
+    have hd : 0 ≤ α - |z.re| := by linarith
+    calc 1 - ‖stripBlaschke α ρ z‖ ^ 2 ≤ C₀ * (α - |z.re|) / Real.cosh (π / (2 * α) * z.im) := h2
+      _ ≤ C₀ * (α - |z.re|) := div_le_self (by positivity) hcosh
+      _ ≤ C * (α - |z.re|) := by gcongr; exact le_max_left _ _
+  · intro z hz'
+    exact (hd1 z hz').2.trans ((le_max_left _ _).trans (le_max_right _ _))
+  · intro z hz'
+    have hd : 0 < α - |z.re| := by linarith
+    exact (hd2 z hz').trans (by gcongr; exact (le_max_right _ _).trans (le_max_right _ _))
 
 end RiemannMasullo
