@@ -1054,6 +1054,42 @@ theorem intervalIntegrable_stripWeight_abs_neg {α s : ℝ} (hα : 0 < α) (hs1 
     exact h.symm
   exact hL.trans hR
 
+/-- **Fubini on the strip.** If `F` is continuous on `(−α, α) × ℝ` and
+`|F σ t| ≤ G σ (1 + t²)⁻¹` with `G` integrable on `[−α, α]`, the iterated integrals agree, and
+`t ↦ ∫ F σ t dσ` is integrable. -/
+theorem stripFubini {α : ℝ} (hα : 0 < α) {F : ℝ → ℝ → ℝ}
+    (hF : ContinuousOn (fun p : ℝ × ℝ ↦ F p.1 p.2) (Ioo (-α) α ×ˢ univ)) {G : ℝ → ℝ}
+    (hG : IntervalIntegrable G MeasureTheory.volume (-α) α)
+    (hb : ∀ σ ∈ Ioo (-α) α, ∀ t : ℝ, |F σ t| ≤ G σ * (1 + t ^ 2)⁻¹) :
+    (∫ σ in (-α)..α, ∫ t : ℝ, F σ t) = (∫ t : ℝ, ∫ σ in (-α)..α, F σ t) ∧
+      MeasureTheory.Integrable fun t : ℝ ↦ ∫ σ in (-α)..α, F σ t := by
+  have hαα : -α ≤ α := by linarith
+  set μ := MeasureTheory.volume.restrict (Ioo (-α) α) with hμ
+  have hG' : MeasureTheory.Integrable G μ :=
+    (intervalIntegrable_iff_integrableOn_Ioo_of_le hαα).mp hG
+  have hprod : μ.prod (MeasureTheory.volume : MeasureTheory.Measure ℝ) =
+      ((MeasureTheory.volume : MeasureTheory.Measure ℝ).prod
+        (MeasureTheory.volume : MeasureTheory.Measure ℝ)).restrict (Ioo (-α) α ×ˢ univ) := by
+    rw [hμ, ← MeasureTheory.Measure.prod_restrict, MeasureTheory.Measure.restrict_univ]
+  have hmeas : MeasurableSet (Ioo (-α) α ×ˢ (univ : Set ℝ)) := measurableSet_Ioo.prod MeasurableSet.univ
+  have hint : MeasureTheory.Integrable (Function.uncurry F)
+      (μ.prod (MeasureTheory.volume : MeasureTheory.Measure ℝ)) := by
+    refine (hG'.mul_prod integrable_inv_one_add_sq).mono' ?_ ?_
+    · rw [hprod]
+      exact hF.aestronglyMeasurable hmeas
+    · rw [hprod]
+      refine (MeasureTheory.ae_restrict_mem hmeas).mono fun p hp ↦ ?_
+      rw [Real.norm_eq_abs]
+      exact hb p.1 hp.1 p.2
+  have hI (f : ℝ → ℝ) : ∫ σ in (-α)..α, f σ = ∫ σ, f σ ∂μ := by
+    rw [intervalIntegral.integral_of_le hαα, MeasureTheory.integral_Ioc_eq_integral_Ioo]
+  constructor
+  · rw [hI]
+    simp_rw [hI]
+    exact MeasureTheory.integral_integral_swap hint
+  · simp_rw [hI]
+    exact hint.integral_prod_right
+
 /-! ### Carleson's formula on the strip, assembled -/
 
 /-- **Carleson's formula on the strip, with the weight `(α − |σ|)^{1−s}`.** Let `B` be bounded by
@@ -1324,10 +1360,103 @@ theorem stripCarleson {α s : ℝ} (hα : 0 < α) (hs0 : 0 ≤ s) (hs1 : s < 1) 
               gcongr
           _ = _ := by ring
   -- (d), (e) Fubini
+  have hd_of {σ : ℝ} (hσ : σ ∈ Ioo (-α) α) : 0 < α - |σ| := by have := abs_lt.mpr hσ; linarith
+  have hwc : ContinuousOn w (Ioo (-α) α) := by
+    intro σ hσ
+    exact ((continuousAt_const.sub continuous_abs.continuousAt).rpow_const
+      (Or.inl (hd_of hσ).ne')).continuousWithinAt
+  have hw₂c : ContinuousOn w₂ (Ioo (-α) α) := by
+    intro σ hσ
+    exact ((((continuousAt_const.sub continuous_abs.continuousAt).rpow_const
+      (Or.inl (hd_of hσ).ne')).const_mul (s * (1 - s))).neg).continuousWithinAt
+  have hfst {f : ℝ → ℝ} (hf : ContinuousOn f (Ioo (-α) α)) :
+      ContinuousOn (fun p : ℝ × ℝ ↦ f p.1) (Ioo (-α) α ×ˢ univ) :=
+    hf.comp continuousOn_fst fun p hp ↦ hp.1
+  have cS (h : ℂ → ℂ) (hd : DifferentiableOn ℂ h {z : ℂ | |z.re| < α}) :
+      ContinuousOn (fun p : ℝ × ℝ ↦ Ph h p.1 p.2) (Ioo (-α) α ×ˢ univ) ∧
+        ContinuousOn (fun p : ℝ × ℝ ↦ ‖h (p.1 + p.2 * I)‖ ^ 2) (Ioo (-α) α ×ˢ univ) := by
+    obtain ⟨c0, c1, c2⟩ := cont3 hd
+    have k0 := continuousOn_strip_coords c0
+    have k1 := continuousOn_strip_coords c1
+    have k2 := continuousOn_strip_coords c2
+    exact ⟨(continuousOn_const.mul (k1.norm.pow 2)).add (continuousOn_const.mul (k0.inner k2)),
+      k0.norm.pow 2⟩
+  -- the bound for `P w`
+  set c₁ := M ^ 2 * (2 * (C + 1) ^ 2 + 4 * C + 6) * α ^ (1 - s) with hc₁
+  have hPw : ∀ σ ∈ Ioo (-α) α, ∀ t : ℝ,
+      |P σ t * w σ| ≤ (c₁ + 2 * M ^ 2 * C * (α - |σ|) ^ (-s)) * (1 + t ^ 2)⁻¹ := by
+    intro σ hσ t
+    have hd := hd_of hσ
+    have hb := (hPQb σ hσ t).1
+    have hw0 : 0 ≤ w σ := Real.rpow_nonneg hd.le _
+    have hwα : w σ ≤ α ^ (1 - s) :=
+      Real.rpow_le_rpow hd.le (by linarith [abs_nonneg σ]) (by linarith)
+    have hwd : w σ / (α - |σ|) = (α - |σ|) ^ (-s) := by
+      simp only [w]
+      rw [div_eq_iff hd.ne', ← Real.rpow_add_one hd.ne']
+      ring_nf
+    have hK0 : 0 ≤ (1 + t ^ 2)⁻¹ := by positivity
+    have hA : A σ * w σ = M ^ 2 * (2 * (C + 1) ^ 2 + 4 * C + 6) * w σ +
+        2 * M ^ 2 * C * (w σ / (α - |σ|)) := by
+      simp only [A]
+      field_simp
+      ring
+    rw [abs_mul, abs_of_nonneg hw0]
+    calc |P σ t| * w σ ≤ A σ * (1 + t ^ 2)⁻¹ * w σ := mul_le_mul_of_nonneg_right hb hw0
+      _ = (M ^ 2 * (2 * (C + 1) ^ 2 + 4 * C + 6) * w σ +
+            2 * M ^ 2 * C * (α - |σ|) ^ (-s)) * (1 + t ^ 2)⁻¹ := by rw [mul_right_comm, hA, hwd]
+      _ ≤ (c₁ + 2 * M ^ 2 * C * (α - |σ|) ^ (-s)) * (1 + t ^ 2)⁻¹ := by
+          gcongr
+          rw [hc₁]
+          exact mul_le_mul_of_nonneg_left hwα (by positivity)
+  have hG₁ : IntervalIntegrable (fun σ : ℝ ↦ c₁ + 2 * M ^ 2 * C * (α - |σ|) ^ (-s))
+      MeasureTheory.volume (-α) α :=
+    intervalIntegrable_const.add ((intervalIntegrable_stripWeight_abs_neg hα hs1).const_mul _)
+  have FubP := stripFubini hα (F := fun σ t ↦ P σ t * w σ)
+    ((((cS H hHd).1).sub ((cS g hg).1)).mul (hfst hwc)) hG₁ hPw
+  -- the bound for `u w₂`
+  have huw : ∀ σ ∈ Ioo (-α) α, ∀ t : ℝ,
+      |u σ t * w₂ σ| ≤ (C * M ^ 2 * (s * (1 - s)) * (α - |σ|) ^ (-s)) * (1 + t ^ 2)⁻¹ := by
+    intro σ hσ t
+    have hd := hd_of hσ
+    have hz := hmem (t := t) hσ
+    have c0 := hg0 _ hz
+    simp only [him] at c0
+    have hdef := hBd _ hz
+    simp only [hre] at hdef
+    have hB1' : 0 ≤ 1 - ‖B (σ + t * I)‖ ^ 2 := by nlinarith [hB0 _ hz, norm_nonneg (B (σ + t * I))]
+    have hg2 : ‖g (σ + t * I)‖ ^ 2 ≤ M ^ 2 * (1 + t ^ 2)⁻¹ :=
+      (pow_le_pow_left₀ (norm_nonneg _) c0 2).trans sq_div_one_add_sq_le
+    have hss : 0 ≤ s * (1 - s) := mul_nonneg hs0 (by linarith)
+    have hw₂ : |w₂ σ| = s * (1 - s) * (α - |σ|) ^ (-s - 1) := by
+      simp only [w₂, abs_neg]
+      exact abs_of_nonneg (mul_nonneg hss (Real.rpow_nonneg hd.le _))
+    have hsplit : (α - |σ|) * (α - |σ|) ^ (-s - 1) = (α - |σ|) ^ (-s) := by
+      have h := Real.rpow_add hd 1 (-s - 1)
+      rw [Real.rpow_one, show (1 : ℝ) + (-s - 1) = -s by ring] at h
+      exact h.symm
+    rw [abs_mul, hw₂, hu, abs_neg, abs_of_nonneg (mul_nonneg hB1' (sq_nonneg _))]
+    have hK0 : 0 ≤ (1 + t ^ 2)⁻¹ := by positivity
+    calc (1 - ‖B (σ + t * I)‖ ^ 2) * ‖g (σ + t * I)‖ ^ 2 * (s * (1 - s) * (α - |σ|) ^ (-s - 1))
+        ≤ (C * (α - |σ|)) * (M ^ 2 * (1 + t ^ 2)⁻¹) * (s * (1 - s) * (α - |σ|) ^ (-s - 1)) := by
+          gcongr
+      _ = C * M ^ 2 * (s * (1 - s)) * ((α - |σ|) * (α - |σ|) ^ (-s - 1)) * (1 + t ^ 2)⁻¹ := by ring
+      _ = _ := by rw [hsplit]
+  have hG₂ : IntervalIntegrable (fun σ : ℝ ↦ C * M ^ 2 * (s * (1 - s)) * (α - |σ|) ^ (-s))
+      MeasureTheory.volume (-α) α :=
+    (intervalIntegrable_stripWeight_abs_neg hα hs1).const_mul _
+  have Fubu := stripFubini hα (F := fun σ t ↦ u σ t * w₂ σ)
+    ((((cS H hHd).2).sub ((cS g hg).2)).mul (hfst hw₂c)) hG₂ huw
   have hF1 : ∫ σ in (-α)..α, (∫ t : ℝ, P σ t) * w σ = ∫ t : ℝ, ∫ σ in (-α)..α, P σ t * w σ := by
-    sorry
+    rw [← FubP.1]
+    apply intervalIntegral.integral_congr
+    intro σ _
+    exact (MeasureTheory.integral_mul_const _ _).symm
   have hF2 : ∫ t : ℝ, ∫ σ in (-α)..α, u σ t * w₂ σ = ∫ σ in (-α)..α, (∫ t : ℝ, u σ t) * w₂ σ := by
-    sorry
+    rw [← Fubu.1]
+    apply intervalIntegral.integral_congr
+    intro σ _
+    exact MeasureTheory.integral_mul_const _ _
   -- (f) integrability in `t` of the two terms on the right
   -- bounds and continuity for `u`
   have hub : ∀ σ ∈ Ioo (-α) α, ∀ t : ℝ, |u σ t| ≤ 2 * M ^ 2 * (1 + t ^ 2)⁻¹ := by
@@ -1354,8 +1483,7 @@ theorem stripCarleson {α s : ℝ} (hα : 0 < α) (hs0 : 0 ≤ s) (hs1 : s < 1) 
     have := hub 0 h0 t
     have hk := abs_nonneg ((1 - s) * α ^ (-s))
     nlinarith [mul_le_mul_of_nonneg_right this hk]
-  have hU : MeasureTheory.Integrable fun t : ℝ ↦ ∫ σ in (-α)..α, u σ t * w₂ σ := by
-    sorry
+  have hU : MeasureTheory.Integrable fun t : ℝ ↦ ∫ σ in (-α)..α, u σ t * w₂ σ := Fubu.2
   -- assembly
   have hL : ∫ σ in (-α)..α, (∫ t : ℝ, E σ t) * w σ = ∫ σ in (-α)..α, (∫ t : ℝ, P σ t) * w σ / 4 := by
     apply intervalIntegral.integral_congr_ae
