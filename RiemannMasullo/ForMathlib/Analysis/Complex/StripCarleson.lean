@@ -820,4 +820,63 @@ theorem stripBlaschke_deriv2_bound {α : ℝ} (hα : 0 < α) {n : ℕ} (ρ : Fin
   calc ‖deriv (deriv (stripBlaschke α ρ)) w‖ ≤ C / r := hest
     _ = 2 * C / (α - |w.re|) := by rw [hr]; field_simp
 
+/-! ### Second derivatives of `‖h‖²` along the coordinate lines -/
+
+section Lines
+
+variable {h : ℂ → ℂ} {U : Set ℂ}
+
+/-- Along the horizontal line through `σ + t I`, `x ↦ h(x + t I)` has derivative `h'`. -/
+theorem hasDerivAt_re_line (hh : DifferentiableOn ℂ h U) (hU : IsOpen U) {σ t : ℝ}
+    (hz : (σ : ℂ) + t * I ∈ U) :
+    HasDerivAt (fun x : ℝ ↦ h (x + t * I)) (deriv h (σ + t * I)) σ := by
+  have hd := (hh.differentiableAt (hU.mem_nhds hz)).hasDerivAt
+  have hl : HasDerivAt (fun x : ℝ ↦ (x : ℂ) + t * I) 1 σ := by
+    simpa using (hasDerivAt_id (σ : ℂ)).comp_ofReal.add_const ((t : ℂ) * I)
+  have h' := hd.comp σ hl
+  rwa [mul_one] at h'
+
+/-- Along the vertical line through `σ + t I`, `y ↦ h(σ + y I)` has derivative `h' · I`. -/
+theorem hasDerivAt_im_line (hh : DifferentiableOn ℂ h U) (hU : IsOpen U) {σ t : ℝ}
+    (hz : (σ : ℂ) + t * I ∈ U) :
+    HasDerivAt (fun y : ℝ ↦ h (σ + y * I)) (deriv h (σ + t * I) * I) t := by
+  have hd := (hh.differentiableAt (hU.mem_nhds hz)).hasDerivAt
+  have hl : HasDerivAt (fun y : ℝ ↦ (σ : ℂ) + y * I) I t := by
+    simpa using ((hasDerivAt_id (t : ℂ)).mul_const I).comp_ofReal.const_add (σ : ℂ)
+  exact hd.comp t hl
+
+/-- The horizontal second derivative of `‖h‖²`: `P = 2‖h'‖² + 2⟪h, h''⟫`. -/
+theorem hasDerivAt_re_line_normSq (hh : DifferentiableOn ℂ h U) (hU : IsOpen U) {σ t : ℝ}
+    (hz : (σ : ℂ) + t * I ∈ U) :
+    HasDerivAt (fun x : ℝ ↦ ‖h (x + t * I)‖ ^ 2)
+        (2 * inner ℝ (h (σ + t * I)) (deriv h (σ + t * I))) σ ∧
+      HasDerivAt (fun x : ℝ ↦ 2 * inner ℝ (h (x + t * I)) (deriv h (x + t * I)))
+        (2 * ‖deriv h (σ + t * I)‖ ^ 2 + 2 * inner ℝ (h (σ + t * I)) (deriv (deriv h) (σ + t * I))) σ := by
+  have h1 := hasDerivAt_re_line hh hU hz
+  have h2 := hasDerivAt_re_line (hh.deriv hU) hU hz
+  refine ⟨h1.norm_sq, ?_⟩
+  have := (h1.inner ℝ h2).const_mul 2
+  convert this using 1
+  rw [real_inner_self_eq_norm_sq]
+  ring
+
+/-- The vertical second derivative of `‖h‖²`: `Q = 2‖h'‖² − 2⟪h, h''⟫`. -/
+theorem hasDerivAt_im_line_normSq (hh : DifferentiableOn ℂ h U) (hU : IsOpen U) {σ t : ℝ}
+    (hz : (σ : ℂ) + t * I ∈ U) :
+    HasDerivAt (fun y : ℝ ↦ ‖h (σ + y * I)‖ ^ 2)
+        (2 * inner ℝ (h (σ + t * I)) (deriv h (σ + t * I) * I)) t ∧
+      HasDerivAt (fun y : ℝ ↦ 2 * inner ℝ (h (σ + y * I)) (deriv h (σ + y * I) * I))
+        (2 * ‖deriv h (σ + t * I)‖ ^ 2 - 2 * inner ℝ (h (σ + t * I)) (deriv (deriv h) (σ + t * I))) t := by
+  have h1 := hasDerivAt_im_line hh hU hz
+  have h2 := (hasDerivAt_im_line (hh.deriv hU) hU hz).mul_const I
+  refine ⟨h1.norm_sq, ?_⟩
+  have := (h1.inner ℝ h2).const_mul 2
+  convert this using 1
+  have hII : deriv (deriv h) (σ + t * I) * I * I = -deriv (deriv h) (σ + t * I) := by
+    rw [mul_assoc, I_mul_I, mul_neg_one]
+  rw [hII, inner_neg_right, real_inner_self_eq_norm_sq, norm_mul, norm_I, mul_one]
+  ring
+
+end Lines
+
 end RiemannMasullo
