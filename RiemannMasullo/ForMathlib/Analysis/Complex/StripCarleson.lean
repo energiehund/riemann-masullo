@@ -556,6 +556,40 @@ theorem tendsto_stripWeight_zero {α p : ℝ} (hp : 0 < p) :
     exact h0.mono_left nhdsWithin_le_nhds
   simpa [Real.zero_rpow hp.ne'] using h.rpow_const (Or.inr hp.le)
 
+/-- `f w''` is integrable on `[0, α]` when `f` is continuous on `[0, α)` and vanishes like `α − x`
+at `α`: it is dominated by `C s (1 − s)(α − x)^{−s}`. -/
+theorem intervalIntegrable_mul_stripWeight'' {α s : ℝ} (hα : 0 < α) (hs0 : 0 ≤ s) (hs1 : s < 1)
+    {f : ℝ → ℝ} (hcf : ContinuousOn f (Ico 0 α)) {C : ℝ}
+    (hfC : ∀ x ∈ Ico 0 α, |f x| ≤ C * (α - x)) :
+    IntervalIntegrable (fun x ↦ f x * (-(s * (1 - s) * (α - x) ^ (-s - 1))))
+      MeasureTheory.volume 0 α := by
+  have hs1' : 0 < 1 - s := by linarith
+  have hg := (intervalIntegrable_stripWeight_neg (α := α) hs1).const_mul (C * (s * (1 - s)))
+  refine hg.mono_fun' ?_ ?_
+  · rw [uIoc_of_le hα.le, MeasureTheory.Measure.restrict_congr_set MeasureTheory.Ioo_ae_eq_Ioc.symm]
+    refine ContinuousOn.aestronglyMeasurable ?_ measurableSet_Ioo
+    intro x hx
+    have hx' : α - x ≠ 0 := by linarith [hx.2]
+    have hfx : ContinuousWithinAt f (Ioo 0 α) x := hcf.mono Ioo_subset_Ico_self x hx
+    exact hfx.mul ((((continuousAt_const.sub continuousAt_id).rpow_const
+      (Or.inl hx')).const_mul (s * (1 - s))).neg).continuousWithinAt
+  · rw [uIoc_of_le hα.le, MeasureTheory.Measure.restrict_congr_set MeasureTheory.Ioo_ae_eq_Ioc.symm]
+    refine (MeasureTheory.ae_restrict_mem measurableSet_Ioo).mono fun x hx ↦ ?_
+    have hpos : 0 < α - x := by linarith [hx.2]
+    have hss : 0 ≤ s * (1 - s) := mul_nonneg hs0 hs1'.le
+    have hsplit : (α - x) ^ (-s) = (α - x) * (α - x) ^ (-s - 1) := by
+      have h := Real.rpow_add hpos 1 (-s - 1)
+      rw [Real.rpow_one, show (1 : ℝ) + (-s - 1) = -s by ring] at h
+      exact h
+    have hfx := hfC x ⟨hx.1.le, hx.2⟩
+    dsimp only
+    rw [norm_mul, Real.norm_eq_abs, norm_neg, Real.norm_eq_abs,
+      abs_of_nonneg (mul_nonneg hss (Real.rpow_nonneg hpos.le _)), hsplit]
+    have hw : 0 ≤ (α - x) ^ (-s - 1) := Real.rpow_nonneg hpos.le _
+    calc |f x| * (s * (1 - s) * (α - x) ^ (-s - 1)) ≤ C * (α - x) * (s * (1 - s) * (α - x) ^ (-s - 1)) :=
+          mul_le_mul_of_nonneg_right hfx (mul_nonneg hss hw)
+      _ = C * (s * (1 - s)) * ((α - x) * (α - x) ^ (-s - 1)) := by ring
+
 /-- **Integration by parts twice against `(α − x)^{1−s}` on `(0, α)`.** For `0 ≤ s < 1` and a
 function `f` that is `C²` on `[0, α)`, vanishes like `α − x` at `α`, and has bounded
 derivative:
@@ -572,33 +606,8 @@ theorem stripWeight_ibp {α s : ℝ} (hα : 0 < α) (hs0 : 0 ≤ s) (hs1 : s < 1
   have hs1' : 0 < 1 - s := by linarith
   have hC : 0 ≤ C := le_trans (abs_nonneg _) (hf'C 0 ⟨le_rfl, hα⟩)
   -- integrability of `f w''`, dominated by `C s (1 − s) (α − x)^{−s}`
-  have hint2 : IntervalIntegrable (fun x ↦ f x * (-(s * (1 - s) * (α - x) ^ (-s - 1))))
-      MeasureTheory.volume 0 α := by
-    have hg := (intervalIntegrable_stripWeight_neg (α := α) hs1).const_mul (C * (s * (1 - s)))
-    refine hg.mono_fun' ?_ ?_
-    · rw [uIoc_of_le hα.le, MeasureTheory.Measure.restrict_congr_set MeasureTheory.Ioo_ae_eq_Ioc.symm]
-      refine ContinuousOn.aestronglyMeasurable ?_ measurableSet_Ioo
-      intro x hx
-      have hx' : α - x ≠ 0 := by linarith [hx.2]
-      have hfx : ContinuousAt f x := (hf x ⟨hx.1.le, hx.2⟩).continuousAt
-      exact (hfx.mul (((continuousAt_const.sub continuousAt_id).rpow_const
-        (Or.inl hx')).const_mul (s * (1 - s))).neg).continuousWithinAt
-    · rw [uIoc_of_le hα.le, MeasureTheory.Measure.restrict_congr_set MeasureTheory.Ioo_ae_eq_Ioc.symm]
-      refine (MeasureTheory.ae_restrict_mem measurableSet_Ioo).mono fun x hx ↦ ?_
-      have hpos : 0 < α - x := by linarith [hx.2]
-      have hss : 0 ≤ s * (1 - s) := mul_nonneg hs0 hs1'.le
-      have hsplit : (α - x) ^ (-s) = (α - x) * (α - x) ^ (-s - 1) := by
-        have h := Real.rpow_add hpos 1 (-s - 1)
-        rw [Real.rpow_one, show (1 : ℝ) + (-s - 1) = -s by ring] at h
-        exact h
-      have hfx := hfC x ⟨hx.1.le, hx.2⟩
-      dsimp only
-      rw [norm_mul, Real.norm_eq_abs, norm_neg, Real.norm_eq_abs,
-        abs_of_nonneg (mul_nonneg hss (Real.rpow_nonneg hpos.le _)), hsplit]
-      have hw : 0 ≤ (α - x) ^ (-s - 1) := Real.rpow_nonneg hpos.le _
-      calc |f x| * (s * (1 - s) * (α - x) ^ (-s - 1)) ≤ C * (α - x) * (s * (1 - s) * (α - x) ^ (-s - 1)) :=
-            mul_le_mul_of_nonneg_right hfx (mul_nonneg hss hw)
-        _ = C * (s * (1 - s)) * ((α - x) * (α - x) ^ (-s - 1)) := by ring
+  have hint2 := intervalIntegrable_mul_stripWeight'' hα hs0 hs1
+    (fun x hx ↦ (hf x hx).continuousAt.continuousWithinAt) hfC
   -- the finite identity for `b ∈ [0, α)`
   have hfin : ∀ b ∈ Ico 0 α, ∫ x in (0 : ℝ)..b, f'' x * (α - x) ^ (1 - s) =
       f' b * (α - b) ^ (1 - s) - f' 0 * α ^ (1 - s)
@@ -658,6 +667,120 @@ theorem stripWeight_ibp {α s : ℝ} (hα : 0 < α) (hs0 : 0 ≤ s) (hs1 : s < 1
   have hL := hprim hint
   have heq := tendsto_nhds_unique (hL.congr' (Filter.eventuallyEq_of_mem hev hfin)) hR
   rw [heq]
+  ring
+
+/-- Reflection of interval integrability: from `F` on `[−α, 0]` to `x ↦ F(−x)` on `[0, α]`. -/
+private theorem intervalIntegrable_reflect {F : ℝ → ℝ} {α : ℝ}
+    (hF : IntervalIntegrable F MeasureTheory.volume (-α) 0) :
+    IntervalIntegrable (fun x ↦ F (-x)) MeasureTheory.volume 0 α := by
+  have h := hF.comp_mul_left (c := -1)
+  simp only [neg_mul, one_mul, div_neg, div_one, neg_neg, neg_zero] at h
+  exact h.symm
+
+/-- **Integration by parts twice against `(α − |x|)^{1−s}` on `(−α, α)`.** The two halves give
+the boundary-free identity with a kink term at `0`:
+`∫_{−α}^{α} f'' w = −2 f(0)(1 − s)α^{−s} + ∫_{−α}^{α} f w''`, `w'' = −s(1 − s)(α − |x|)^{−s−1}`. -/
+theorem stripWeight_ibp_symm {α s : ℝ} (hα : 0 < α) (hs0 : 0 ≤ s) (hs1 : s < 1) {f f' f'' : ℝ → ℝ}
+    (hf : ∀ x ∈ Ioo (-α) α, HasDerivAt f (f' x) x) (hf' : ∀ x ∈ Ioo (-α) α, HasDerivAt f' (f'' x) x)
+    (hc'' : ContinuousOn f'' (Ioo (-α) α)) {C : ℝ}
+    (hfC : ∀ x ∈ Ioo (-α) α, |f x| ≤ C * (α - |x|)) (hf'C : ∀ x ∈ Ioo (-α) α, |f' x| ≤ C)
+    (hint : IntervalIntegrable (fun x ↦ f'' x * (α - |x|) ^ (1 - s)) MeasureTheory.volume (-α) α) :
+    ∫ x in (-α)..α, f'' x * (α - |x|) ^ (1 - s) =
+      -(2 * f 0 * ((1 - s) * α ^ (-s))) +
+        ∫ x in (-α)..α, f x * (-(s * (1 - s) * (α - |x|) ^ (-s - 1))) := by
+  have hαn : -α < 0 := by linarith
+  have hIco : Ico 0 α ⊆ Ioo (-α) α := fun x hx ↦ ⟨by linarith [hx.1], hx.2⟩
+  have hIcoN (x : ℝ) (hx : x ∈ Ico 0 α) : -x ∈ Ioo (-α) α := ⟨by linarith [hx.2], by linarith [hx.1]⟩
+  -- the right half
+  have hintR : IntervalIntegrable (fun x ↦ f'' x * (α - x) ^ (1 - s)) MeasureTheory.volume 0 α := by
+    have h : IntervalIntegrable (fun x ↦ f'' x * (α - |x|) ^ (1 - s)) MeasureTheory.volume 0 α :=
+      hint.mono_set (by rw [uIcc_of_le hα.le, uIcc_of_le (by linarith)]; exact Icc_subset_Icc (by linarith) le_rfl)
+    refine h.congr ?_
+    rw [uIoc_of_le hα.le]
+    intro x (hx : x ∈ Ioc 0 α)
+    simp only [abs_of_pos hx.1]
+  have hR := stripWeight_ibp hα hs0 hs1 (fun x hx ↦ hf x (hIco hx)) (fun x hx ↦ hf' x (hIco hx))
+    (hc''.mono hIco) (C := C)
+    (fun x (hx : x ∈ Ico 0 α) ↦ by simpa [abs_of_nonneg hx.1] using hfC x (hIco hx))
+    (fun x hx ↦ hf'C x (hIco hx)) hintR
+  -- the left half, by reflection
+  have hg : ∀ x ∈ Ico 0 α, HasDerivAt (fun y ↦ f (-y)) (-f' (-x)) x := fun x hx ↦ by
+    convert (hf (-x) (hIcoN x hx)).comp x (hasDerivAt_neg x) using 1 <;> first | rfl | ring
+  have hg' : ∀ x ∈ Ico 0 α, HasDerivAt (fun y ↦ -f' (-y)) (f'' (-x)) x := fun x hx ↦ by
+    convert ((hf' (-x) (hIcoN x hx)).comp x (hasDerivAt_neg x)).neg using 1 <;> first | rfl | ring
+  have hcg : ContinuousOn (fun x ↦ f'' (-x)) (Ico 0 α) :=
+    hc''.comp continuous_neg.continuousOn (fun x hx ↦ hIcoN x hx)
+  have hintL : IntervalIntegrable (fun x ↦ f'' (-x) * (α - x) ^ (1 - s)) MeasureTheory.volume 0 α := by
+    have h : IntervalIntegrable (fun x ↦ f'' x * (α - |x|) ^ (1 - s)) MeasureTheory.volume (-α) 0 :=
+      hint.mono_set (by rw [uIcc_of_le hαn.le, uIcc_of_le (by linarith)]; exact Icc_subset_Icc le_rfl (by linarith))
+    refine (intervalIntegrable_reflect h).congr ?_
+    rw [uIoc_of_le hα.le]
+    intro x (hx : x ∈ Ioc 0 α)
+    simp only [abs_neg, abs_of_pos hx.1]
+  have hL := stripWeight_ibp hα hs0 hs1 hg hg' hcg (C := C)
+    (fun x (hx : x ∈ Ico 0 α) ↦ by simpa [abs_neg, abs_of_nonneg hx.1] using hfC (-x) (hIcoN x hx))
+    (fun x hx ↦ by simpa [abs_neg] using hf'C (-x) (hIcoN x hx)) hintL
+  -- change variables back and add the halves
+  have cF : ∫ x in (-α)..0, f'' x * (α - |x|) ^ (1 - s) =
+      ∫ x in (0 : ℝ)..α, f'' (-x) * (α - x) ^ (1 - s) := by
+    have h := intervalIntegral.integral_comp_neg (a := (0 : ℝ)) (b := α)
+      (fun x ↦ f'' x * (α - |x|) ^ (1 - s))
+    simp only [neg_zero] at h
+    rw [← h]
+    apply intervalIntegral.integral_congr
+    intro x hx
+    rw [uIcc_of_le hα.le] at hx
+    simp only [abs_neg, abs_of_nonneg hx.1]
+  have cG : ∫ x in (-α)..0, f x * (-(s * (1 - s) * (α - |x|) ^ (-s - 1))) =
+      ∫ x in (0 : ℝ)..α, f (-x) * (-(s * (1 - s) * (α - x) ^ (-s - 1))) := by
+    have h := intervalIntegral.integral_comp_neg (a := (0 : ℝ)) (b := α)
+      (fun x ↦ f x * (-(s * (1 - s) * (α - |x|) ^ (-s - 1))))
+    simp only [neg_zero] at h
+    rw [← h]
+    apply intervalIntegral.integral_congr
+    intro x hx
+    rw [uIcc_of_le hα.le] at hx
+    simp only [abs_neg, abs_of_nonneg hx.1]
+  have rF : ∫ x in (0 : ℝ)..α, f'' x * (α - |x|) ^ (1 - s) =
+      ∫ x in (0 : ℝ)..α, f'' x * (α - x) ^ (1 - s) := by
+    apply intervalIntegral.integral_congr
+    intro x hx
+    rw [uIcc_of_le hα.le] at hx
+    simp only [abs_of_nonneg hx.1]
+  have rG : ∫ x in (0 : ℝ)..α, f x * (-(s * (1 - s) * (α - |x|) ^ (-s - 1))) =
+      ∫ x in (0 : ℝ)..α, f x * (-(s * (1 - s) * (α - x) ^ (-s - 1))) := by
+    apply intervalIntegral.integral_congr
+    intro x hx
+    rw [uIcc_of_le hα.le] at hx
+    simp only [abs_of_nonneg hx.1]
+  -- integrability of the four pieces
+  have iF_L : IntervalIntegrable (fun x ↦ f'' x * (α - |x|) ^ (1 - s)) MeasureTheory.volume (-α) 0 :=
+    hint.mono_set (by rw [uIcc_of_le hαn.le, uIcc_of_le (by linarith)]; exact Icc_subset_Icc le_rfl (by linarith))
+  have iF_R : IntervalIntegrable (fun x ↦ f'' x * (α - |x|) ^ (1 - s)) MeasureTheory.volume 0 α :=
+    hint.mono_set (by rw [uIcc_of_le hα.le, uIcc_of_le (by linarith)]; exact Icc_subset_Icc (by linarith) le_rfl)
+  have iG_R0 := intervalIntegrable_mul_stripWeight'' hα hs0 hs1
+    (fun x hx ↦ (hf x (hIco hx)).continuousAt.continuousWithinAt)
+    (C := C) (fun x (hx : x ∈ Ico 0 α) ↦ by simpa [abs_of_nonneg hx.1] using hfC x (hIco hx))
+  have iG_L0 := intervalIntegrable_mul_stripWeight'' hα hs0 hs1 (f := fun y ↦ f (-y))
+    (fun x hx ↦ ((hg x hx).continuousAt).continuousWithinAt)
+    (C := C) (fun x (hx : x ∈ Ico 0 α) ↦ by simpa [abs_neg, abs_of_nonneg hx.1] using hfC (-x) (hIcoN x hx))
+  have iG_R : IntervalIntegrable (fun x ↦ f x * (-(s * (1 - s) * (α - |x|) ^ (-s - 1))))
+      MeasureTheory.volume 0 α := by
+    refine iG_R0.congr ?_
+    rw [uIoc_of_le hα.le]
+    intro x (hx : x ∈ Ioc 0 α)
+    simp only [abs_of_pos hx.1]
+  have iG_L : IntervalIntegrable (fun x ↦ f x * (-(s * (1 - s) * (α - |x|) ^ (-s - 1))))
+      MeasureTheory.volume (-α) 0 := by
+    have h := iG_L0.comp_mul_left (c := -1)
+    simp only [neg_mul, one_mul, neg_neg, div_neg, div_one, neg_zero] at h
+    refine h.symm.congr ?_
+    rw [uIoc_of_le hαn.le]
+    intro x (hx : x ∈ Ioc (-α) 0)
+    simp only [abs_of_nonpos hx.2]
+  rw [← intervalIntegral.integral_add_adjacent_intervals iF_L iF_R,
+    ← intervalIntegral.integral_add_adjacent_intervals iG_L iG_R, cF, cG, rF, rG, hR, hL]
+  simp only [neg_zero]
   ring
 
 end RiemannMasullo
