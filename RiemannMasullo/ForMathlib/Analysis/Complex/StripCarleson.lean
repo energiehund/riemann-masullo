@@ -327,4 +327,138 @@ theorem stripBlaschke_defect_bounds {α : ℝ} (hα : 0 < α) {n : ℕ} (ρ : Fi
     _ = (∑ j, c j * (2 * k)) * (α - |σ|) / Real.cosh (k * t) := by
         rw [← Finset.sum_div, ← Finset.sum_mul]
 
+/-! ### Derivatives -/
+
+/-- The strip coordinate is holomorphic where `exp(k I w) ≠ −1`, with derivative
+`2 k I u / (u + 1)²`, `u = exp(k I w)`. -/
+theorem hasDerivAt_stripBlaschkeToDisk (k : ℝ) {w : ℂ}
+    (hw : Complex.exp ((k : ℂ) * (I * (w - 0))) + 1 ≠ 0) :
+    HasDerivAt (stripBlaschkeToDisk 0 k)
+      (2 * ((k : ℂ) * I) * Complex.exp ((k : ℂ) * (I * (w - 0))) /
+        (Complex.exp ((k : ℂ) * (I * (w - 0))) + 1) ^ 2) w := by
+  have hu : HasDerivAt (fun w : ℂ ↦ Complex.exp ((k : ℂ) * (I * (w - 0))))
+      (Complex.exp ((k : ℂ) * (I * (w - 0))) * ((k : ℂ) * I)) w := by
+    have hl : HasDerivAt (fun w : ℂ ↦ (k : ℂ) * (I * (w - 0))) ((k : ℂ) * I) w := by
+      simpa [mul_comm, mul_assoc] using ((hasDerivAt_id w).sub_const 0).const_mul I |>.const_mul (k : ℂ)
+    exact hl.cexp
+  have h := (hu.sub_const 1).div (hu.add_const 1) hw
+  unfold stripBlaschkeToDisk
+  convert h using 1
+  field_simp
+  ring
+
+/-- On the closed strip (`Re u ≥ 0`), `‖2 k I u / (u + 1)²‖ ≤ k`. -/
+theorem norm_deriv_stripBlaschkeToDisk_le {k : ℝ} (hk : 0 ≤ k) {u : ℂ} (hu : 0 ≤ u.re) :
+    ‖2 * ((k : ℂ) * I) * u / (u + 1) ^ 2‖ ≤ k := by
+  have hsq : 1 + ‖u‖ ^ 2 ≤ ‖u + 1‖ ^ 2 := by
+    rw [← Complex.normSq_eq_norm_sq, ← Complex.normSq_eq_norm_sq, Complex.normSq_apply,
+      Complex.normSq_apply]
+    simp only [Complex.add_re, Complex.add_im, Complex.one_re, Complex.one_im, add_zero]
+    nlinarith
+  have hpos : 0 < ‖u + 1‖ ^ 2 := lt_of_lt_of_le (by positivity) hsq
+  rw [norm_div, norm_pow, norm_mul, norm_mul, norm_mul, Complex.norm_real, norm_I, mul_one,
+    Complex.norm_two, Real.norm_of_nonneg hk, div_le_iff₀ hpos]
+  nlinarith [sq_nonneg (‖u‖ - 1), norm_nonneg u]
+
+/-- The derivative of a Möbius factor: `φ_a' (z) = (1 − |a|²)/(1 − ā z)²`. -/
+theorem hasDerivAt_diskMobius {a z : ℂ} (hz : 1 - (starRingEnd ℂ) a * z ≠ 0) :
+    HasDerivAt (diskMobius a) ((1 - (starRingEnd ℂ) a * a) / (1 - (starRingEnd ℂ) a * z) ^ 2) z := by
+  have h1 : HasDerivAt (fun x : ℂ ↦ x - a) 1 z := (hasDerivAt_id z).sub_const a
+  have h2 : HasDerivAt (fun x : ℂ ↦ 1 - (starRingEnd ℂ) a * x) (-(starRingEnd ℂ) a) z := by
+    simpa using ((hasDerivAt_id z).const_mul ((starRingEnd ℂ) a)).const_sub 1
+  have h := h1.div h2 hz
+  unfold diskMobius
+  convert h using 1
+  congr 1
+  ring
+
+/-- On the closed disk, `‖φ_a'‖ ≤ (1 + |a|)/(1 − |a|)`, and `‖φ_a‖ ≤ 1`. -/
+theorem diskMobius_norm_bounds {a z : ℂ} (ha : ‖a‖ < 1) (hz : ‖z‖ ≤ 1) :
+    ‖diskMobius a z‖ ≤ 1 ∧
+      ‖(1 - (starRingEnd ℂ) a * a) / (1 - (starRingEnd ℂ) a * z) ^ 2‖ ≤ (1 + ‖a‖) / (1 - ‖a‖) := by
+  have h0 := (diskMobius_defect_bounds ha hz).1
+  refine ⟨by nlinarith [norm_nonneg (diskMobius a z)], ?_⟩
+  have hlow : 1 - ‖a‖ ≤ ‖1 - (starRingEnd ℂ) a * z‖ := by
+    have := norm_sub_norm_le (1 : ℂ) ((starRingEnd ℂ) a * z)
+    rw [norm_one, norm_mul, Complex.norm_conj] at this
+    nlinarith [norm_nonneg a, norm_nonneg z, mul_le_mul_of_nonneg_left hz (norm_nonneg a)]
+  have ha0 : 0 < 1 - ‖a‖ := by linarith
+  have hnum : ‖1 - (starRingEnd ℂ) a * a‖ = 1 - ‖a‖ ^ 2 := by
+    rw [Complex.conj_mul', ← Complex.ofReal_pow, ← Complex.ofReal_one, ← Complex.ofReal_sub,
+      Complex.norm_real, Real.norm_of_nonneg (by nlinarith [norm_nonneg a])]
+  rw [norm_div, norm_pow, hnum]
+  have hsq : (1 - ‖a‖) ^ 2 ≤ ‖1 - (starRingEnd ℂ) a * z‖ ^ 2 := pow_le_pow_left₀ ha0.le hlow 2
+  calc (1 - ‖a‖ ^ 2) / ‖1 - (starRingEnd ℂ) a * z‖ ^ 2 ≤ (1 - ‖a‖ ^ 2) / (1 - ‖a‖) ^ 2 :=
+        div_le_div_of_nonneg_left (by nlinarith [norm_nonneg a]) (by positivity) hsq
+    _ = (1 + ‖a‖) / (1 - ‖a‖) := by field_simp; ring
+
+/-- On the open strip `|Re w| < α`, `u = exp(k I w)` with `k = π/(2α)` has positive real part. -/
+theorem stripExp_re_pos {α : ℝ} (hα : 0 < α) {w : ℂ} (hw : |w.re| < α) :
+    0 < (Complex.exp (((π / (2 * α) : ℝ) : ℂ) * (I * (w - 0)))).re := by
+  rw [Complex.exp_re]
+  apply mul_pos (Real.exp_pos _)
+  apply Real.cos_pos_of_mem_Ioo
+  have him : (((π / (2 * α) : ℝ) : ℂ) * (I * (w - 0))).im = π / (2 * α) * w.re := by
+    rw [sub_zero, Complex.im_ofReal_mul, Complex.I_mul_im]
+  rw [him]
+  have hk : 0 < π / (2 * α) := by positivity
+  have h1 : π / (2 * α) * |w.re| < π / 2 := by
+    calc π / (2 * α) * |w.re| < π / (2 * α) * α := by gcongr
+      _ = π / 2 := by field_simp
+  constructor
+  · nlinarith [neg_abs_le w.re, mul_le_mul_of_nonneg_left (neg_abs_le w.re) hk.le]
+  · nlinarith [le_abs_self w.re, mul_le_mul_of_nonneg_left (le_abs_self w.re) hk.le]
+
+/-- **A finite strip Blaschke product is holomorphic on the open strip, with bounded
+derivative.** -/
+theorem stripBlaschke_deriv_bound {α : ℝ} (hα : 0 < α) {n : ℕ} (ρ : Fin n → ℂ)
+    (hρ : ∀ j, |(ρ j).re| < α) :
+    ∃ C : ℝ, 0 ≤ C ∧ ∀ w : ℂ, |w.re| < α →
+      DifferentiableAt ℂ (stripBlaschke α ρ) w ∧ ‖deriv (stripBlaschke α ρ) w‖ ≤ C := by
+  set k := π / (2 * α) with hk
+  have hk0 : 0 < k := by positivity
+  let T := stripBlaschkeToDisk 0 k
+  have hmem {v : ℂ} (hv : |v.re| < α) : ‖T v‖ < 1 := by
+    have h := stripBlaschkeToDisk_mem (w₀ := 0) (w := v) hk0 (by
+      rw [Complex.zero_re, sub_zero, hk]
+      have : (π / 2) / (π / (2 * α)) = α := by field_simp
+      rw [this]; exact hv)
+    simpa [Metric.mem_ball, dist_zero_right] using h
+  let a (j : Fin n) := T (ρ j)
+  let c (j : Fin n) := (1 + ‖a j‖) / (1 - ‖a j‖)
+  have hc0 (j : Fin n) : 0 ≤ c j := div_nonneg (by positivity) (by linarith [hmem (hρ j)])
+  refine ⟨∑ j, c j * k, Finset.sum_nonneg fun j _ ↦ mul_nonneg (hc0 j) hk0.le, ?_⟩
+  intro w hw
+  set u := Complex.exp ((k : ℂ) * (I * (w - 0)))
+  have hu : 0 < u.re := stripExp_re_pos hα hw
+  have hu1 : u + 1 ≠ 0 := fun h ↦ by
+    have := congrArg Complex.re h
+    simp at this
+    linarith
+  have hTw : ‖T w‖ ≤ 1 := (hmem hw).le
+  have hden (j : Fin n) : 1 - (starRingEnd ℂ) (a j) * T w ≠ 0 :=
+    one_sub_conj_mul_ne_zero (hmem (hρ j)) hTw
+  have hT := hasDerivAt_stripBlaschkeToDisk k hu1
+  have hf (j : Fin n) := (hasDerivAt_diskMobius (hden j)).comp w hT
+  have hB := HasDerivAt.fun_finsetProd (u := Finset.univ) (fun j _ ↦ hf j)
+  have heq : (fun w ↦ ∏ j ∈ Finset.univ, (diskMobius (a j) ∘ T) w) = stripBlaschke α ρ := by
+    funext v; rfl
+  rw [heq] at hB
+  refine ⟨hB.differentiableAt, ?_⟩
+  rw [hB.deriv]
+  refine (norm_sum_le _ _).trans (Finset.sum_le_sum fun i _ ↦ ?_)
+  rw [norm_smul]
+  have hprod : ‖∏ j ∈ Finset.univ.erase i, (diskMobius (a j) ∘ T) w‖ ≤ 1 := by
+    rw [norm_prod]
+    exact Finset.prod_le_one₀ (fun _ _ ↦ norm_nonneg _)
+      (fun j _ ↦ (diskMobius_norm_bounds (hmem (hρ j)) hTw).1)
+  have hderiv : ‖(1 - (starRingEnd ℂ) (a i) * a i) / (1 - (starRingEnd ℂ) (a i) * T w) ^ 2 *
+      (2 * ((k : ℂ) * I) * u / (u + 1) ^ 2)‖ ≤ c i * k := by
+    rw [norm_mul]
+    exact mul_le_mul (diskMobius_norm_bounds (hmem (hρ i)) hTw).2
+      (norm_deriv_stripBlaschkeToDisk_le hk0.le hu.le) (norm_nonneg _) (hc0 i)
+  calc ‖∏ j ∈ Finset.univ.erase i, (diskMobius (a j) ∘ T) w‖ * ‖_‖ ≤ 1 * (c i * k) :=
+        mul_le_mul hprod hderiv (norm_nonneg _) zero_le_one
+    _ = c i * k := one_mul _
+
 end RiemannMasullo
