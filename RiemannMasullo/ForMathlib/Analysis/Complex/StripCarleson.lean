@@ -8,6 +8,7 @@ public import Mathlib.Analysis.SpecialFunctions.Pow.Deriv
 public import Mathlib.Analysis.SpecialFunctions.Integrability.Basic
 public import Mathlib.MeasureTheory.Integral.IntegralEqImproper
 public import Mathlib.MeasureTheory.Integral.Prod
+import Mathlib.Analysis.SpecialFunctions.ImproperIntegrals
 import Mathlib.MeasureTheory.Integral.DominatedConvergence
 import Mathlib.Analysis.Complex.RealDeriv
 public import RiemannMasullo.ForMathlib.Analysis.Complex.Blaschke
@@ -985,6 +986,60 @@ theorem norm_mul_strip_bounds (hB : DifferentiableOn ℂ B {z : ℂ | |z.re| < �
 
 end ProductBounds
 
+/-! ### Continuity along lines, and the bound for `P` and `Q` -/
+
+/-- A function continuous on the open strip is continuous along every vertical line in it. -/
+theorem continuous_im_line {α σ : ℝ} {E : Type*} [TopologicalSpace E] {f : ℂ → E}
+    (hf : ContinuousOn f {z : ℂ | |z.re| < α}) (hσ : |σ| < α) :
+    Continuous fun t : ℝ ↦ f (σ + t * I) := by
+  refine hf.comp_continuous (by fun_prop) fun t ↦ ?_
+  show |((σ : ℂ) + t * I).re| < α
+  simpa using hσ
+
+/-- A function continuous on the open strip is continuous along horizontal lines, on `(−α, α)`. -/
+theorem continuousOn_re_line {α t : ℝ} {E : Type*} [TopologicalSpace E] {f : ℂ → E}
+    (hf : ContinuousOn f {z : ℂ | |z.re| < α}) :
+    ContinuousOn (fun σ : ℝ ↦ f (σ + t * I)) (Ioo (-α) α) := by
+  refine hf.comp (by fun_prop) fun σ hσ ↦ ?_
+  show |((σ : ℂ) + t * I).re| < α
+  simpa [abs_lt] using hσ
+
+/-- A function continuous on the open strip is continuous on `(−α, α) × ℝ` in coordinates. -/
+theorem continuousOn_strip_coords {α : ℝ} {E : Type*} [TopologicalSpace E] {f : ℂ → E}
+    (hf : ContinuousOn f {z : ℂ | |z.re| < α}) :
+    ContinuousOn (fun p : ℝ × ℝ ↦ f (p.1 + p.2 * I)) (Ioo (-α) α ×ˢ univ) := by
+  refine hf.comp (by fun_prop) fun p hp ↦ ?_
+  show |((p.1 : ℂ) + p.2 * I).re| < α
+  simpa [abs_lt] using hp.1
+
+/-- `|2‖b‖² ± 2⟪a, c⟫| ≤ 2‖b‖² + 2‖a‖‖c‖`. -/
+theorem abs_two_sq_add_two_inner_le (a b c : ℂ) :
+    |2 * ‖b‖ ^ 2 + 2 * inner ℝ a c| ≤ 2 * ‖b‖ ^ 2 + 2 * (‖a‖ * ‖c‖) ∧
+      |2 * ‖b‖ ^ 2 - 2 * inner ℝ a c| ≤ 2 * ‖b‖ ^ 2 + 2 * (‖a‖ * ‖c‖) := by
+  have hi := abs_real_inner_le_norm a c
+  have hb : 0 ≤ ‖b‖ ^ 2 := by positivity
+  constructor <;> (rw [abs_le]; constructor <;> nlinarith [abs_le.mp hi])
+
+/-- `(1 + t²)⁻¹ → 0` at both ends of the real line. -/
+theorem tendsto_inv_one_add_sq_atTop :
+    Tendsto (fun t : ℝ ↦ (1 + t ^ 2)⁻¹) atTop (𝓝 0) :=
+  tendsto_inv_atTop_zero.comp (tendsto_atTop_mono (fun t ↦ by linarith) (tendsto_pow_atTop two_ne_zero))
+
+theorem tendsto_inv_one_add_sq_atBot :
+    Tendsto (fun t : ℝ ↦ (1 + t ^ 2)⁻¹) atBot (𝓝 0) := by
+  have h := tendsto_inv_one_add_sq_atTop.comp tendsto_neg_atBot_atTop
+  refine h.congr fun t ↦ ?_
+  simp [Function.comp]
+
+/-- `M/(1 + t²)` squared is at most `M² (1 + t²)⁻¹`. -/
+theorem sq_div_one_add_sq_le {M t : ℝ} : (M / (1 + t ^ 2)) ^ 2 ≤ M ^ 2 * (1 + t ^ 2)⁻¹ := by
+  have h1 : 1 ≤ 1 + t ^ 2 := by nlinarith [sq_nonneg t]
+  rw [div_pow]
+  rw [div_eq_mul_inv]
+  apply mul_le_mul_of_nonneg_left _ (sq_nonneg M)
+  rw [inv_le_inv₀ (by positivity) (by positivity)]
+  nlinarith
+
 /-! ### Carleson's formula on the strip, assembled -/
 
 /-- **Carleson's formula on the strip, with the weight `(α − |σ|)^{1−s}`.** Let `B` be bounded by
@@ -1025,14 +1080,132 @@ theorem stripCarleson {α s : ℝ} (hα : 0 < α) (hs0 : 0 ≤ s) (hs1 : s < 1) 
   have hu (σ t : ℝ) : u σ t = -((1 - ‖B (σ + t * I)‖ ^ 2) * ‖g (σ + t * I)‖ ^ 2) := by
     simp only [u, hH, norm_mul, mul_pow]
     ring
+  -- common facts
+  have hU := isOpen_strip α
+  have hHd : DifferentiableOn ℂ H {z : ℂ | |z.re| < α} := hB.mul hg
+  have hmem {σ t : ℝ} (hσ : σ ∈ Ioo (-α) α) : |((σ : ℂ) + t * I).re| < α := by
+    simpa [abs_lt] using hσ
+  have him (σ t : ℝ) : ((σ : ℂ) + t * I).im = t := by simp
+  have hre (σ t : ℝ) : ((σ : ℂ) + t * I).re = σ := by simp
+  have cont3 {h : ℂ → ℂ} (hd : DifferentiableOn ℂ h {z : ℂ | |z.re| < α}) :
+      ContinuousOn h {z : ℂ | |z.re| < α} ∧ ContinuousOn (deriv h) {z : ℂ | |z.re| < α} ∧
+        ContinuousOn (deriv (deriv h)) {z : ℂ | |z.re| < α} :=
+    ⟨hd.continuousOn, (hd.deriv hU).continuousOn, ((hd.deriv hU).deriv hU).continuousOn⟩
+  have hM : 0 ≤ M := by
+    have := hg0 0 (by simpa using hα)
+    simpa using (norm_nonneg _).trans this
+  have hC : 0 ≤ C := (norm_nonneg _).trans (hB1 0 (by simpa using hα))
+  -- pointwise bounds on the line `σ + t I`
+  have bH {σ t : ℝ} (hσ : σ ∈ Ioo (-α) α) :=
+    norm_mul_strip_bounds hB hg hB0 hB1 hB2 hg0 hg1 hg2 (hmem (t := t) hσ)
+  let A (σ : ℝ) : ℝ := M ^ 2 * (2 * (C + 1) ^ 2 + 2 * (C / (α - |σ|) + 2 * C + 1) + 4)
+  have hPhH : ∀ σ ∈ Ioo (-α) α, ∀ t : ℝ,
+      |Ph H σ t| ≤ M ^ 2 * (2 * (C + 1) ^ 2 + 2 * (C / (α - |σ|) + 2 * C + 1)) * (1 + t ^ 2)⁻¹ ∧
+      |Qh H σ t| ≤ M ^ 2 * (2 * (C + 1) ^ 2 + 2 * (C / (α - |σ|) + 2 * C + 1)) * (1 + t ^ 2)⁻¹ := by
+    intro σ hσ t
+    obtain ⟨b0, b1, b2⟩ := bH (t := t) hσ
+    simp only [him, hre] at b0 b1 b2
+    have hd : 0 < α - |σ| := by have := abs_lt.mpr hσ; linarith
+    have hc1 : 0 ≤ C / (α - |σ|) + 2 * C + 1 := by positivity
+    have hD : 0 ≤ M / (1 + t ^ 2) := by positivity
+    have key : 2 * ‖deriv H (σ + t * I)‖ ^ 2 + 2 * (‖H (σ + t * I)‖ * ‖deriv (deriv H) (σ + t * I)‖) ≤
+        (2 * (C + 1) ^ 2 + 2 * (C / (α - |σ|) + 2 * C + 1)) * (M / (1 + t ^ 2)) ^ 2 := by
+      have e1 : ‖deriv H (σ + t * I)‖ ^ 2 ≤ ((C + 1) * (M / (1 + t ^ 2))) ^ 2 :=
+        pow_le_pow_left₀ (norm_nonneg _) b1 2
+      have e2 : ‖H (σ + t * I)‖ * ‖deriv (deriv H) (σ + t * I)‖ ≤
+          (M / (1 + t ^ 2)) * ((C / (α - |σ|) + 2 * C + 1) * (M / (1 + t ^ 2))) :=
+        mul_le_mul b0 b2 (norm_nonneg _) hD
+      nlinarith
+    have hsq := sq_div_one_add_sq_le (M := M) (t := t)
+    have hcoef : 0 ≤ 2 * (C + 1) ^ 2 + 2 * (C / (α - |σ|) + 2 * C + 1) := by positivity
+    have final : (2 * (C + 1) ^ 2 + 2 * (C / (α - |σ|) + 2 * C + 1)) * (M / (1 + t ^ 2)) ^ 2 ≤
+        M ^ 2 * (2 * (C + 1) ^ 2 + 2 * (C / (α - |σ|) + 2 * C + 1)) * (1 + t ^ 2)⁻¹ := by
+      nlinarith [mul_le_mul_of_nonneg_left hsq hcoef]
+    obtain ⟨i1, i2⟩ := abs_two_sq_add_two_inner_le (H (σ + t * I)) (deriv H (σ + t * I))
+      (deriv (deriv H) (σ + t * I))
+    exact ⟨i1.trans (key.trans final), i2.trans (key.trans final)⟩
+  have hPhg : ∀ σ ∈ Ioo (-α) α, ∀ t : ℝ,
+      |Ph g σ t| ≤ M ^ 2 * 4 * (1 + t ^ 2)⁻¹ ∧ |Qh g σ t| ≤ M ^ 2 * 4 * (1 + t ^ 2)⁻¹ := by
+    intro σ hσ t
+    have b0 := hg0 _ (hmem (t := t) hσ)
+    have b1 := hg1 _ (hmem (t := t) hσ)
+    have b2 := hg2 _ (hmem (t := t) hσ)
+    rw [him] at b0 b1 b2
+    have hD : 0 ≤ M / (1 + t ^ 2) := by positivity
+    have key : 2 * ‖deriv g (σ + t * I)‖ ^ 2 + 2 * (‖g (σ + t * I)‖ * ‖deriv (deriv g) (σ + t * I)‖) ≤
+        4 * (M / (1 + t ^ 2)) ^ 2 := by
+      have e1 : ‖deriv g (σ + t * I)‖ ^ 2 ≤ (M / (1 + t ^ 2)) ^ 2 := pow_le_pow_left₀ (norm_nonneg _) b1 2
+      have e2 := mul_le_mul b0 b2 (norm_nonneg _) hD
+      nlinarith
+    have hsq := sq_div_one_add_sq_le (M := M) (t := t)
+    obtain ⟨i1, i2⟩ := abs_two_sq_add_two_inner_le (g (σ + t * I)) (deriv g (σ + t * I))
+      (deriv (deriv g) (σ + t * I))
+    exact ⟨i1.trans (key.trans (by nlinarith)), i2.trans (key.trans (by nlinarith))⟩
+  have hPQb : ∀ σ ∈ Ioo (-α) α, ∀ t : ℝ, |P σ t| ≤ A σ * (1 + t ^ 2)⁻¹ ∧ |Q σ t| ≤ A σ * (1 + t ^ 2)⁻¹ := by
+    intro σ hσ t
+    obtain ⟨a1, a2⟩ := hPhH σ hσ t
+    obtain ⟨c1, c2⟩ := hPhg σ hσ t
+    constructor
+    · calc |P σ t| ≤ |Ph H σ t| + |Ph g σ t| := abs_sub _ _
+        _ ≤ A σ * (1 + t ^ 2)⁻¹ := by simp only [A]; nlinarith
+    · calc |Q σ t| ≤ |Qh H σ t| + |Qh g σ t| := abs_sub _ _
+        _ ≤ A σ * (1 + t ^ 2)⁻¹ := by simp only [A]; nlinarith
+  -- continuity along vertical lines
+  have contV {h : ℂ → ℂ} (hd : DifferentiableOn ℂ h {z : ℂ | |z.re| < α}) {σ : ℝ} (hσ : σ ∈ Ioo (-α) α) :
+      Continuous (Ph h σ) ∧ Continuous (Qh h σ) := by
+    obtain ⟨c0, c1, c2⟩ := cont3 hd
+    have hσ' : |σ| < α := abs_lt.mpr hσ
+    have k0 := continuous_im_line c0 hσ'
+    have k1 := continuous_im_line c1 hσ'
+    have k2 := continuous_im_line c2 hσ'
+    exact ⟨(continuous_const.mul (k1.norm.pow 2)).add (continuous_const.mul (k0.inner k2)),
+      (continuous_const.mul (k1.norm.pow 2)).sub (continuous_const.mul (k0.inner k2))⟩
+  have hint_of_bound {F : ℝ → ℝ} (hF : Continuous F) {K : ℝ} (hb : ∀ t, |F t| ≤ K * (1 + t ^ 2)⁻¹) :
+      MeasureTheory.Integrable F :=
+    (integrable_inv_one_add_sq.const_mul K).mono' hF.aestronglyMeasurable
+      (Filter.Eventually.of_forall fun t ↦ by rw [Real.norm_eq_abs]; exact hb t)
+  -- integrability in `t` of `P` and `Q` on every vertical line
+  have hPi : ∀ σ ∈ Ioo (-α) α, MeasureTheory.Integrable (P σ) := fun σ hσ ↦
+    hint_of_bound (((contV hHd hσ).1).sub ((contV hg hσ).1)) fun t ↦ (hPQb σ hσ t).1
+  have hQi : ∀ σ ∈ Ioo (-α) α, MeasureTheory.Integrable (Q σ) := fun σ hσ ↦
+    hint_of_bound (((contV hHd hσ).2).sub ((contV hg hσ).2)) fun t ↦ (hPQb σ hσ t).2
   -- (a) on every vertical line the second vertical derivative integrates to zero
   have hQ : ∀ σ ∈ Ioo (-α) α, ∫ t : ℝ, Q σ t = 0 := by
-    sorry
-  -- integrability in `t` of `P` and `Q` on every vertical line
-  have hPi : ∀ σ ∈ Ioo (-α) α, MeasureTheory.Integrable (P σ) := by
-    sorry
-  have hQi : ∀ σ ∈ Ioo (-α) α, MeasureTheory.Integrable (Q σ) := by
-    sorry
+    intro σ hσ
+    have hline (t : ℝ) : (σ : ℂ) + t * I ∈ {z : ℂ | |z.re| < α} := hmem hσ
+    have lim {h : ℂ → ℂ} {K : ℝ} (hb : ∀ t : ℝ, ‖h (σ + t * I)‖ * ‖deriv h (σ + t * I)‖ ≤ K * (1 + t ^ 2)⁻¹) :
+        Tendsto (fun t : ℝ ↦ 2 * inner ℝ (h (σ + t * I)) (deriv h (σ + t * I) * I)) atBot (𝓝 0) ∧
+        Tendsto (fun t : ℝ ↦ 2 * inner ℝ (h (σ + t * I)) (deriv h (σ + t * I) * I)) atTop (𝓝 0) := by
+      have bd (t : ℝ) : ‖2 * inner ℝ (h (σ + t * I)) (deriv h (σ + t * I) * I)‖ ≤ 2 * K * (1 + t ^ 2)⁻¹ := by
+        rw [Real.norm_eq_abs, abs_mul, abs_two]
+        have := abs_real_inner_le_norm (h (σ + t * I)) (deriv h (σ + t * I) * I)
+        rw [norm_mul, norm_I, mul_one] at this
+        nlinarith [hb t]
+      constructor
+      · exact squeeze_zero_norm bd (by simpa using tendsto_inv_one_add_sq_atBot.const_mul (2 * K))
+      · exact squeeze_zero_norm bd (by simpa using tendsto_inv_one_add_sq_atTop.const_mul (2 * K))
+    have bHH (t : ℝ) : ‖H (σ + t * I)‖ * ‖deriv H (σ + t * I)‖ ≤ (C + 1) * M ^ 2 * (1 + t ^ 2)⁻¹ := by
+      obtain ⟨b0, b1, -⟩ := bH (t := t) hσ
+      rw [him] at b0 b1
+      have := mul_le_mul b0 b1 (norm_nonneg _) (by positivity)
+      have hsq := sq_div_one_add_sq_le (M := M) (t := t)
+      nlinarith [mul_le_mul_of_nonneg_left hsq (by positivity : (0 : ℝ) ≤ C + 1)]
+    have bgg (t : ℝ) : ‖g (σ + t * I)‖ * ‖deriv g (σ + t * I)‖ ≤ M ^ 2 * (1 + t ^ 2)⁻¹ := by
+      have b0 := hg0 _ (hmem (t := t) hσ)
+      have b1 := hg1 _ (hmem (t := t) hσ)
+      rw [him] at b0 b1
+      have := mul_le_mul b0 b1 (norm_nonneg _) (by positivity)
+      have hsq := sq_div_one_add_sq_le (M := M) (t := t)
+      nlinarith
+    have hH0 := integral_im_line_secondDeriv_eq_zero hHd hU hline
+      (hint_of_bound (contV hHd hσ).2 fun t ↦ (hPhH σ hσ t).2) (lim bHH).1 (lim bHH).2
+    have hg0' := integral_im_line_secondDeriv_eq_zero hg hU hline
+      (hint_of_bound (contV hg hσ).2 fun t ↦ (hPhg σ hσ t).2) (lim bgg).1 (lim bgg).2
+    show ∫ t : ℝ, (Qh H σ t - Qh g σ t) = 0
+    rw [MeasureTheory.integral_sub (hint_of_bound (contV hHd hσ).2 fun t ↦ (hPhH σ hσ t).2)
+      (hint_of_bound (contV hg hσ).2 fun t ↦ (hPhg σ hσ t).2)]
+    simp only [Qh]
+    rw [hH0, hg0', sub_zero]
   -- (b) hence `∫ E = ¼ ∫ P` on every vertical line
   have hEP : ∀ σ ∈ Ioo (-α) α, ∫ t : ℝ, E σ t = (∫ t : ℝ, P σ t) / 4 := by
     intro σ hσ
