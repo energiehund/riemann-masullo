@@ -1222,16 +1222,41 @@ theorem stripCarleson {α s : ℝ} (hα : 0 < α) (hs0 : 0 ≤ s) (hs1 : s < 1) 
   have hF2 : ∫ t : ℝ, ∫ σ in (-α)..α, u σ t * w₂ σ = ∫ σ in (-α)..α, (∫ t : ℝ, u σ t) * w₂ σ := by
     sorry
   -- (f) integrability in `t` of the two terms on the right
+  -- bounds and continuity for `u`
+  have hub : ∀ σ ∈ Ioo (-α) α, ∀ t : ℝ, |u σ t| ≤ 2 * M ^ 2 * (1 + t ^ 2)⁻¹ := by
+    intro σ hσ t
+    obtain ⟨b0, -, -⟩ := bH (t := t) hσ
+    have c0 := hg0 _ (hmem (t := t) hσ)
+    simp only [him] at b0 c0
+    have e1 := pow_le_pow_left₀ (norm_nonneg _) b0 2
+    have e2 := pow_le_pow_left₀ (norm_nonneg _) c0 2
+    have hsq := sq_div_one_add_sq_le (M := M) (t := t)
+    have : |u σ t| ≤ ‖H (σ + t * I)‖ ^ 2 + ‖g (σ + t * I)‖ ^ 2 := by
+      simp only [u]
+      rw [abs_le]
+      constructor <;> nlinarith [sq_nonneg ‖H (σ + t * I)‖, sq_nonneg ‖g (σ + t * I)‖]
+    linarith
+  have hu_contV {σ : ℝ} (hσ : σ ∈ Ioo (-α) α) : Continuous (u σ) :=
+    ((continuous_im_line (cont3 hHd).1 (abs_lt.mpr hσ)).norm.pow 2).sub
+      ((continuous_im_line (cont3 hg).1 (abs_lt.mpr hσ)).norm.pow 2)
+  have h0 : (0 : ℝ) ∈ Ioo (-α) α := ⟨by linarith, hα⟩
   have hK : MeasureTheory.Integrable fun t : ℝ ↦ -(2 * u 0 t * ((1 - s) * α ^ (-s))) := by
-    sorry
+    refine hint_of_bound (K := 4 * M ^ 2 * |(1 - s) * α ^ (-s)|)
+      (((continuous_const.mul (hu_contV h0)).mul continuous_const).neg) fun t ↦ ?_
+    rw [abs_neg, abs_mul, abs_mul, abs_two]
+    have := hub 0 h0 t
+    have hk := abs_nonneg ((1 - s) * α ^ (-s))
+    nlinarith [mul_le_mul_of_nonneg_right this hk]
   have hU : MeasureTheory.Integrable fun t : ℝ ↦ ∫ σ in (-α)..α, u σ t * w₂ σ := by
     sorry
   -- assembly
   have hL : ∫ σ in (-α)..α, (∫ t : ℝ, E σ t) * w σ = ∫ σ in (-α)..α, (∫ t : ℝ, P σ t) * w σ / 4 := by
     apply intervalIntegral.integral_congr_ae
-    refine Filter.Eventually.of_forall fun σ hσ ↦ ?_
+    filter_upwards [(Set.countable_singleton α).ae_notMem MeasureTheory.volume] with σ hσα hσ
     rw [uIoc_of_le (by linarith)] at hσ
-    sorry
+    have hσ' : σ ∈ Ioo (-α) α := ⟨hσ.1, lt_of_le_of_ne hσ.2 (by simpa using hσα)⟩
+    rw [hEP σ hσ']
+    ring
   have hstep : ∫ σ in (-α)..α, (∫ t : ℝ, E σ t) * w σ =
       (2 * ((1 - s) * α ^ (-s)) * (∫ t : ℝ, (1 - ‖B (t * I)‖ ^ 2) * ‖g (t * I)‖ ^ 2) +
         s * (1 - s) * ∫ σ in (-α)..α,
