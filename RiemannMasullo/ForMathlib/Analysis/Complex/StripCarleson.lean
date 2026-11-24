@@ -1040,6 +1040,20 @@ theorem sq_div_one_add_sq_le {M t : ℝ} : (M / (1 + t ^ 2)) ^ 2 ≤ M ^ 2 * (1 
   rw [inv_le_inv₀ (by positivity) (by positivity)]
   nlinarith
 
+/-- `(α − |σ|)^{−s}` is integrable on `[−α, α]` for `s < 1`. -/
+theorem intervalIntegrable_stripWeight_abs_neg {α s : ℝ} (hα : 0 < α) (hs1 : s < 1) :
+    IntervalIntegrable (fun σ : ℝ ↦ (α - |σ|) ^ (-s)) MeasureTheory.volume (-α) α := by
+  have hR : IntervalIntegrable (fun σ : ℝ ↦ (α - |σ|) ^ (-s)) MeasureTheory.volume 0 α := by
+    refine (intervalIntegrable_stripWeight_neg (α := α) hs1).congr ?_
+    rw [uIoc_of_le hα.le]
+    intro x (hx : x ∈ Ioc 0 α)
+    simp only [abs_of_pos hx.1]
+  have hL : IntervalIntegrable (fun σ : ℝ ↦ (α - |σ|) ^ (-s)) MeasureTheory.volume (-α) 0 := by
+    have h := hR.comp_mul_left (c := -1)
+    simp only [neg_mul, one_mul, abs_neg, div_neg, div_one, neg_zero] at h
+    exact h.symm
+  exact hL.trans hR
+
 /-! ### Carleson's formula on the strip, assembled -/
 
 /-- **Carleson's formula on the strip, with the weight `(α − |σ|)^{1−s}`.** Let `B` be bounded by
@@ -1215,7 +1229,100 @@ theorem stripCarleson {α s : ℝ} (hα : 0 < α) (hs0 : 0 ≤ s) (hs1 : s < 1) 
   -- (c) integration by parts in `σ` on every horizontal line
   have hIBP : ∀ t : ℝ, ∫ σ in (-α)..α, P σ t * w σ =
       -(2 * u 0 t * ((1 - s) * α ^ (-s))) + ∫ σ in (-α)..α, u σ t * w₂ σ := by
-    sorry
+    intro t
+    -- continuity along the horizontal line
+    have cH (h : ℂ → ℂ) (hd : DifferentiableOn ℂ h {z : ℂ | |z.re| < α}) :
+        ContinuousOn (fun σ : ℝ ↦ Ph h σ t) (Ioo (-α) α) := by
+      obtain ⟨c0, c1, c2⟩ := cont3 hd
+      have k0 := continuousOn_re_line (t := t) c0
+      have k1 := continuousOn_re_line (t := t) c1
+      have k2 := continuousOn_re_line (t := t) c2
+      exact (continuousOn_const.mul (k1.norm.pow 2)).add (continuousOn_const.mul (k0.inner k2))
+    have hPc : ContinuousOn (fun σ : ℝ ↦ P σ t) (Ioo (-α) α) := (cH H hHd).sub (cH g hg)
+    have hwc : ContinuousOn w (Ioo (-α) α) := by
+      intro σ hσ
+      have : α - |σ| ≠ 0 := by have := abs_lt.mpr hσ; linarith
+      exact ((continuousAt_const.sub continuous_abs.continuousAt).rpow_const
+        (Or.inl this)).continuousWithinAt
+    -- the constant for the hypotheses on `u` and its first derivative
+    set C₀ := C * M ^ 2 + 2 * (C + 1) * M ^ 2 + 2 * M ^ 2 with hC₀
+    have hDle : M / (1 + t ^ 2) ≤ M := div_le_self hM (by nlinarith [sq_nonneg t])
+    refine stripWeight_ibp_symm hα hs0 hs1 (f := fun σ ↦ u σ t)
+      (f' := fun σ ↦ 2 * inner ℝ (H (σ + t * I)) (deriv H (σ + t * I)) -
+        2 * inner ℝ (g (σ + t * I)) (deriv g (σ + t * I)))
+      (f'' := fun σ ↦ P σ t)
+      (fun x hx ↦ ((hasDerivAt_re_line_normSq hHd hU (hmem hx)).1).sub
+        ((hasDerivAt_re_line_normSq hg hU (hmem hx)).1))
+      (fun x hx ↦ ((hasDerivAt_re_line_normSq hHd hU (hmem hx)).2).sub
+        ((hasDerivAt_re_line_normSq hg hU (hmem hx)).2))
+      hPc (C := C₀) ?_ ?_ ?_
+    · -- `|u| ≤ C₀ (α − |σ|)`
+      intro x hx
+      have hz := hmem (t := t) hx
+      have hd : 0 ≤ α - |x| := by have := abs_lt.mpr hx; linarith
+      have c0 := hg0 _ hz
+      simp only [him] at c0
+      have hgM : ‖g (x + t * I)‖ ≤ M := c0.trans hDle
+      have hdef := hBd _ hz
+      simp only [hre] at hdef
+      have hB1' : 0 ≤ 1 - ‖B (x + t * I)‖ ^ 2 := by
+        nlinarith [hB0 _ hz, norm_nonneg (B (x + t * I))]
+      rw [show u x t = -((1 - ‖B (x + t * I)‖ ^ 2) * ‖g (x + t * I)‖ ^ 2) from hu x t, abs_neg,
+        abs_of_nonneg (mul_nonneg hB1' (sq_nonneg _))]
+      have hg2 : ‖g (x + t * I)‖ ^ 2 ≤ M ^ 2 := pow_le_pow_left₀ (norm_nonneg _) hgM 2
+      calc (1 - ‖B (x + t * I)‖ ^ 2) * ‖g (x + t * I)‖ ^ 2 ≤ (C * (α - |x|)) * M ^ 2 :=
+            mul_le_mul hdef hg2 (sq_nonneg _) (by positivity)
+        _ ≤ C₀ * (α - |x|) := by
+            rw [hC₀]
+            nlinarith [mul_nonneg (mul_nonneg (by positivity : (0 : ℝ) ≤ 2 * (C + 1) + 2) (sq_nonneg M)) hd]
+    · -- `|f'| ≤ C₀`
+      intro x hx
+      obtain ⟨b0, b1, -⟩ := bH (t := t) hx
+      have c0 := hg0 _ (hmem (t := t) hx)
+      have c1 := hg1 _ (hmem (t := t) hx)
+      simp only [him] at b0 b1 c0 c1
+      have i1 := abs_real_inner_le_norm (H (x + t * I)) (deriv H (x + t * I))
+      have i2 := abs_real_inner_le_norm (g (x + t * I)) (deriv g (x + t * I))
+      have p1 : ‖H (x + t * I)‖ * ‖deriv H (x + t * I)‖ ≤ M * ((C + 1) * M) :=
+        mul_le_mul (b0.trans hDle) (b1.trans (by nlinarith)) (norm_nonneg _) hM
+      have p2 : ‖g (x + t * I)‖ * ‖deriv g (x + t * I)‖ ≤ M * M :=
+        mul_le_mul (c0.trans hDle) (c1.trans hDle) (norm_nonneg _) hM
+      rw [abs_le]
+      constructor <;> nlinarith [abs_le.mp i1, abs_le.mp i2, mul_nonneg hC (sq_nonneg M)]
+    · -- integrability of `P · w` on `(−α, α)`
+      set K := (1 + t ^ 2)⁻¹ with hK
+      have hK0 : 0 ≤ K := by positivity
+      have hg := ((intervalIntegrable_stripWeight_abs_neg hα hs1).const_mul (K * (2 * M ^ 2 * C))).add
+        (intervalIntegrable_const (c := K * (M ^ 2 * (2 * (C + 1) ^ 2 + 4 * C + 6) * α ^ (1 - s))))
+      refine hg.mono_fun' ?_ ?_
+      · rw [uIoc_of_le (by linarith), MeasureTheory.Measure.restrict_congr_set MeasureTheory.Ioo_ae_eq_Ioc.symm]
+        exact (hPc.mul hwc).aestronglyMeasurable measurableSet_Ioo
+      · rw [uIoc_of_le (by linarith), MeasureTheory.Measure.restrict_congr_set MeasureTheory.Ioo_ae_eq_Ioc.symm]
+        refine (MeasureTheory.ae_restrict_mem measurableSet_Ioo).mono fun σ hσ ↦ ?_
+        have hd : 0 < α - |σ| := by have := abs_lt.mpr hσ; linarith
+        have hb := (hPQb σ hσ t).1
+        have hw0 : 0 ≤ w σ := Real.rpow_nonneg hd.le _
+        have hwα : w σ ≤ α ^ (1 - s) :=
+          Real.rpow_le_rpow hd.le (by linarith [abs_nonneg σ]) (by linarith)
+        have hwd : w σ / (α - |σ|) = (α - |σ|) ^ (-s) := by
+          simp only [w]
+          rw [div_eq_iff hd.ne', ← Real.rpow_add_one hd.ne']
+          ring_nf
+        dsimp only
+        rw [norm_mul, Real.norm_eq_abs, Real.norm_eq_abs, abs_of_nonneg hw0]
+        have hA : A σ * w σ = M ^ 2 * (2 * (C + 1) ^ 2 + 4 * C + 6) * w σ +
+            2 * M ^ 2 * C * (w σ / (α - |σ|)) := by
+          simp only [A]
+          field_simp
+          ring
+        calc |P σ t| * w σ ≤ A σ * K * w σ := mul_le_mul_of_nonneg_right hb hw0
+          _ = K * (A σ * w σ) := by ring
+          _ = K * (M ^ 2 * (2 * (C + 1) ^ 2 + 4 * C + 6) * w σ) +
+                K * (2 * M ^ 2 * C) * (α - |σ|) ^ (-s) := by rw [hA, hwd]; ring
+          _ ≤ K * (M ^ 2 * (2 * (C + 1) ^ 2 + 4 * C + 6) * α ^ (1 - s)) +
+                K * (2 * M ^ 2 * C) * (α - |σ|) ^ (-s) := by
+              gcongr
+          _ = _ := by ring
   -- (d), (e) Fubini
   have hF1 : ∫ σ in (-α)..α, (∫ t : ℝ, P σ t) * w σ = ∫ t : ℝ, ∫ σ in (-α)..α, P σ t * w σ := by
     sorry
