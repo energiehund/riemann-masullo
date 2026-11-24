@@ -2,6 +2,7 @@ module
 
 public import RiemannMasullo.Ch10_TraceSpectral.Sec4a
 import RiemannMasullo.Ch10_TraceSpectral.Sec1
+import RiemannMasullo.AppC_LCTVS.Sec3b_HilbertSchmidtProduct
 
 /-! # The spectral trace statements of §10.4.2 at orders between zero and one -/
 
@@ -68,6 +69,72 @@ it connects with the rest of the proof in Lean; in the paper it is used on pp. 4
 theorem spectralStripConvolution_nuclear_of_le_one (_hs₁ : s ≤ 1) (φ : BruhatCompactSupport C𝔽) :
     IsNuclearOperator (E := H₀) (F := H₀) (Aq(φ)) := by
   sorry
+
+/-- Classical input: the Dixmier–Malliavin factorization theorem. Every compactly supported
+Bruhat test on the idele class group is a finite sum of convolutions of two such tests, for
+the Tamagawa Haar measure. J. Dixmier and P. Malliavin, *Factorisations de fonctions et de
+vecteurs indéfiniment différentiables*, Bull. Sci. Math. (2) 102 (1978), 307–330,
+Théorème 3.1, applied on the Lie group `G₁ / K` for an open subgroup `G₁` and a compact
+subgroup `K` with respect to which the test is a Bruhat test (F. Bruhat, *Distributions sur
+un groupe localement compact et applications à l'étude des représentations des groupes
+℘-adiques*, Bull. Soc. Math. France 89 (1961), 43–75). The library proves the case of tests
+of one angular character (`spectralHomogeneousTest_convolution_factorization` in §10.3). -/
+theorem bruhatCompactSupport_convolution_factorization (φ : BruhatCompactSupport C𝔽) :
+    φ ∈ AddSubmonoid.closure {θ : BruhatCompactSupport C𝔽 |
+      ∃ u v : BruhatCompactSupport C𝔽, θ.val = lcaConvolution μ𝔽 u.val v.val} := by
+  sorry
+
+/-- Paper: Theorem 10.4.2.1, p. 459, at order `s = 0`. Every compactly supported Bruhat test
+acts on the strip quotient by a Hilbert–Schmidt operator.
+Reconstruction: The paper does not state this. It is the estimate of the route posted on
+#7405: after the Mellin transform each angular component of the quotient is a model space
+`H²(S) ⊖ B H²(S)` of the strip `S = {|Re z| < α}` (the theta closure is the common kernel of
+the jets at the zeros in the open strip, `spectralStripJet_commonKernel`, and at order zero
+no boundary jet survives). The Malmquist–Takenaka basis of the model space, harmonic measure
+and the count of zeros with multiplicity bound the Hilbert–Schmidt norm. Not proved in Lean:
+the library has no Hardy space of the strip. -/
+theorem spectralStripConvolution_hilbertSchmidt_of_order_zero (_hs0 : s = 0)
+    (φ : BruhatCompactSupport C𝔽) : Aq(φ) ∈ hilbertSchmidtOperators H₀ H₀ := by
+  sorry
+
+/-- Convolution of tests is composition of their actions on the strip quotient. -/
+private theorem spectralConvolution_lcaConvolution (θ u v : BruhatCompactSupport C𝔽)
+    (h : θ.val = lcaConvolution μ𝔽 u.val v.val) : Aq(θ) = (Aq(u)).comp (Aq(v)) := by
+  obtain ⟨θ', hθ', hact⟩ := bruhatRegularizedAction_convolution μ𝔽
+    (hardySobolevTranslation μ𝔽 m𝔽 (-α) α s hI hs)
+    (exists_hardySobolevTranslation μ𝔽 m𝔽 (-α) α s hI hs).choose_spec.2 u v
+  obtain rfl : θ' = θ := Subtype.ext (hθ'.trans h.symm)
+  ext q
+  obtain ⟨x, rfl⟩ := Submodule.Quotient.mk_surjective _ q
+  change Aq(θ') ((globalThetaSobolev F a hI hs).mkQ x) =
+    Aq(u) (Aq(v) ((globalThetaSobolev F a hI hs).mkQ x))
+  rw [spectralConvolution_mkQ, spectralConvolution_mkQ, spectralConvolution_mkQ]
+  exact congrArg _ (hact x)
+
+/-- Paper: Theorem 10.4.2.1, p. 459, equation (10.4.2.5), at order `s = 0`. Every compactly
+supported Bruhat test acts by a nuclear convolution operator on the strip quotient.
+Deviation: This is the case `s = 0` of `spectralStripConvolution_nuclear_of_le_one`, for every
+width. It follows from the Hilbert–Schmidt estimate
+`spectralStripConvolution_hilbertSchmidt_of_order_zero` and the Dixmier–Malliavin
+factorization `bruhatCompactSupport_convolution_factorization`, since a product of two
+Hilbert–Schmidt operators is nuclear. -/
+theorem spectralStripConvolution_nuclear_of_order_zero (hs0 : s = 0)
+    (φ : BruhatCompactSupport C𝔽) : IsNuclearOperator (E := H₀) (F := H₀) (Aq(φ)) := by
+  have hlin := spectralConvolution_isLinear (F := F) a hI hs
+  induction bruhatCompactSupport_convolution_factorization φ using
+    AddSubmonoid.closure_induction with
+  | mem θ h =>
+    obtain ⟨u, v, huv⟩ := h
+    rw [spectralConvolution_lcaConvolution a hα hs θ u v huv]
+    exact nuclear_hilbertSchmidt_comp
+      ⟨_, spectralStripConvolution_hilbertSchmidt_of_order_zero a hα hs hs0 u⟩
+      ⟨_, spectralStripConvolution_hilbertSchmidt_of_order_zero a hα hs hs0 v⟩
+  | zero =>
+    rw [hlin.map_zero]
+    exact (nuclearEndomorphisms _).zero_mem
+  | add x y _ _ hx hy =>
+    rw [hlin.map_add]
+    exact (nuclearEndomorphisms _).add_mem hx hy
 
 /-- Paper: Theorem 10.4.2.1, p. 459. Spectral projection after convolution is nuclear.
 This follows from the open statement `spectralStripConvolution_nuclear_of_le_one` by (10.4.2.5).
