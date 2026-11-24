@@ -2,6 +2,10 @@ module
 
 public import Mathlib.Analysis.Complex.CauchyIntegral
 public import Mathlib.Analysis.InnerProductSpace.Calculus
+public import Mathlib.MeasureTheory.Integral.IntervalIntegral.IntegrationByParts
+public import Mathlib.Analysis.SpecialFunctions.Pow.Deriv
+public import Mathlib.Analysis.SpecialFunctions.Integrability.Basic
+import Mathlib.MeasureTheory.Integral.DominatedConvergence
 import Mathlib.Analysis.Complex.RealDeriv
 public import RiemannMasullo.ForMathlib.Analysis.Complex.Blaschke
 
@@ -15,7 +19,7 @@ one-variable derivatives, in the form used for Carleson's formula on a vertical 
 public section
 
 open Complex Set Filter
-open scoped Topology Real
+open scoped Topology Real Interval
 
 namespace RiemannMasullo
 
@@ -460,5 +464,200 @@ theorem stripBlaschke_deriv_bound {α : ℝ} (hα : 0 < α) {n : ℕ} (ρ : Fin 
   calc ‖∏ j ∈ Finset.univ.erase i, (diskMobius (a j) ∘ T) w‖ * ‖_‖ ≤ 1 * (c i * k) :=
         mul_le_mul hprod hderiv (norm_nonneg _) zero_le_one
     _ = c i * k := one_mul _
+
+/-! ### Integration by parts against the weight `(α − σ)^{1−s}` -/
+
+/-- The weight `(α − x)^{1−s}` has derivative `−(1 − s)(α − x)^{−s}` for `x < α`. -/
+theorem hasDerivAt_stripWeight {α s x : ℝ} (hx : x < α) :
+    HasDerivAt (fun y : ℝ ↦ (α - y) ^ (1 - s)) (-((1 - s) * (α - x) ^ (-s))) x := by
+  have h := ((hasDerivAt_id' x).const_sub α).rpow_const (p := 1 - s) (Or.inl (by linarith))
+  convert h using 1
+  rw [show (1 - s - 1) = -s by ring]
+  ring
+
+/-- The derivative `−(1 − s)(α − x)^{−s}` has derivative `−s(1 − s)(α − x)^{−s−1}` for `x < α`. -/
+theorem hasDerivAt_stripWeight' {α s x : ℝ} (hx : x < α) :
+    HasDerivAt (fun y : ℝ ↦ -((1 - s) * (α - y) ^ (-s))) (-(s * (1 - s) * (α - x) ^ (-s - 1))) x := by
+  have h := (((hasDerivAt_id' x).const_sub α).rpow_const (p := -s)
+    (Or.inl (by linarith))).const_mul (-(1 - s))
+  convert h using 1
+  · funext y
+    ring
+  · ring
+
+/-- **Integration by parts twice on `[0, b]`, `b < α`.** -/
+theorem stripWeight_ibp_finite {α s b : ℝ} (hb0 : 0 ≤ b) (hbα : b < α) {f f' f'' : ℝ → ℝ}
+    (hf : ∀ x ∈ Icc 0 b, HasDerivAt f (f' x) x) (hf' : ∀ x ∈ Icc 0 b, HasDerivAt f' (f'' x) x)
+    (hc'' : ContinuousOn f'' (Icc 0 b)) :
+    ∫ x in (0 : ℝ)..b, f'' x * (α - x) ^ (1 - s) =
+      f' b * (α - b) ^ (1 - s) - f' 0 * α ^ (1 - s)
+        - (f b * (-((1 - s) * (α - b) ^ (-s))) - f 0 * (-((1 - s) * α ^ (-s))))
+        + ∫ x in (0 : ℝ)..b, f x * (-(s * (1 - s) * (α - x) ^ (-s - 1))) := by
+  have hlt (x : ℝ) (hx : x ∈ Icc 0 b) : x < α := lt_of_le_of_lt hx.2 hbα
+  have huIcc : [[(0 : ℝ), b]] = Icc 0 b := uIcc_of_le hb0
+  -- continuity of everything on `[0, b]`
+  have hcW : ContinuousOn (fun y : ℝ ↦ (α - y) ^ (1 - s)) (Icc 0 b) := fun x hx ↦
+    (hasDerivAt_stripWeight (s := s) (hlt x hx)).continuousAt.continuousWithinAt
+  have hcW' : ContinuousOn (fun y : ℝ ↦ -((1 - s) * (α - y) ^ (-s))) (Icc 0 b) := fun x hx ↦
+    (hasDerivAt_stripWeight' (s := s) (hlt x hx)).continuousAt.continuousWithinAt
+  have hcW'' : ContinuousOn (fun y : ℝ ↦ -(s * (1 - s) * (α - y) ^ (-s - 1))) (Icc 0 b) := by
+    intro x hx
+    apply ContinuousAt.continuousWithinAt
+    have : α - x ≠ 0 := by linarith [hlt x hx]
+    exact (((continuousAt_const.sub continuousAt_id).rpow_const (Or.inl this)).const_mul
+      (s * (1 - s))).neg
+  have hcf : ContinuousOn f (Icc 0 b) := fun x hx ↦ (hf x hx).continuousAt.continuousWithinAt
+  have hcf' : ContinuousOn f' (Icc 0 b) := fun x hx ↦ (hf' x hx).continuousAt.continuousWithinAt
+  have hIoo {g g' : ℝ → ℝ} (h : ∀ x ∈ Icc 0 b, HasDerivAt g (g' x) x) :
+      ∀ x ∈ Ioo (min 0 b) (max 0 b), HasDerivAt g (g' x) x := fun x hx ↦
+    h x (by rw [min_eq_left hb0, max_eq_right hb0] at hx; exact Ioo_subset_Icc_self hx)
+  -- first integration by parts: `∫ W f'' = [W f'] − ∫ W' f'`
+  have h1 := intervalIntegral.integral_mul_deriv_eq_deriv_mul_of_hasDerivAt
+    (u := fun y : ℝ ↦ (α - y) ^ (1 - s)) (v := f')
+    (u' := fun y ↦ -((1 - s) * (α - y) ^ (-s))) (v' := f'')
+    (by rw [huIcc]; exact hcW) (by rw [huIcc]; exact hcf')
+    (hIoo fun x hx ↦ hasDerivAt_stripWeight (hlt x hx)) (hIoo hf')
+    (by rw [intervalIntegrable_iff_integrableOn_Icc_of_le hb0]; exact hcW'.integrableOn_Icc)
+    (by rw [intervalIntegrable_iff_integrableOn_Icc_of_le hb0]; exact hc''.integrableOn_Icc)
+  -- second integration by parts: `∫ W' f' = [W' f] − ∫ W'' f`
+  have h2 := intervalIntegral.integral_mul_deriv_eq_deriv_mul_of_hasDerivAt
+    (u := fun y : ℝ ↦ -((1 - s) * (α - y) ^ (-s))) (v := f)
+    (u' := fun y ↦ -(s * (1 - s) * (α - y) ^ (-s - 1))) (v' := f')
+    (by rw [huIcc]; exact hcW') (by rw [huIcc]; exact hcf)
+    (hIoo fun x hx ↦ hasDerivAt_stripWeight' (hlt x hx)) (hIoo hf)
+    (by rw [intervalIntegrable_iff_integrableOn_Icc_of_le hb0]; exact hcW''.integrableOn_Icc)
+    (by rw [intervalIntegrable_iff_integrableOn_Icc_of_le hb0]; exact hcf'.integrableOn_Icc)
+  have e1 : ∫ x in (0 : ℝ)..b, f'' x * (α - x) ^ (1 - s) =
+      ∫ x in (0 : ℝ)..b, (α - x) ^ (1 - s) * f'' x :=
+    intervalIntegral.integral_congr fun x _ ↦ mul_comm _ _
+  have e2 : ∫ x in (0 : ℝ)..b, -((1 - s) * (α - x) ^ (-s)) * f' x =
+      ∫ x in (0 : ℝ)..b, f' x * -((1 - s) * (α - x) ^ (-s)) :=
+    intervalIntegral.integral_congr fun x _ ↦ mul_comm _ _
+  have e3 : ∫ x in (0 : ℝ)..b, -(s * (1 - s) * (α - x) ^ (-s - 1)) * f x =
+      ∫ x in (0 : ℝ)..b, f x * -(s * (1 - s) * (α - x) ^ (-s - 1)) :=
+    intervalIntegral.integral_congr fun x _ ↦ mul_comm _ _
+  rw [e1, h1, h2, e3]
+  simp only [sub_zero]
+  ring
+
+/-- `(α − x)^{−s}` is integrable on `[0, α]` for `s < 1`. -/
+theorem intervalIntegrable_stripWeight_neg {α s : ℝ} (hs1 : s < 1) :
+    IntervalIntegrable (fun x : ℝ ↦ (α - x) ^ (-s)) MeasureTheory.volume 0 α := by
+  have h := (intervalIntegral.intervalIntegrable_rpow' (a := 0) (b := α) (r := -s)
+    (by linarith)).comp_sub_left α
+  simpa [sub_self, sub_zero] using h.symm
+
+/-- `(α − b)^{p} → 0` as `b → α⁻`, for `p > 0`. -/
+theorem tendsto_stripWeight_zero {α p : ℝ} (hp : 0 < p) :
+    Tendsto (fun b : ℝ ↦ (α - b) ^ p) (𝓝[<] α) (𝓝 0) := by
+  have h : Tendsto (fun b : ℝ ↦ α - b) (𝓝[<] α) (𝓝 0) := by
+    have h0 : Tendsto (fun b : ℝ ↦ α - b) (𝓝 α) (𝓝 (α - α)) := tendsto_const_nhds.sub tendsto_id
+    rw [sub_self] at h0
+    exact h0.mono_left nhdsWithin_le_nhds
+  simpa [Real.zero_rpow hp.ne'] using h.rpow_const (Or.inr hp.le)
+
+/-- **Integration by parts twice against `(α − x)^{1−s}` on `(0, α)`.** For `0 ≤ s < 1` and a
+function `f` that is `C²` on `[0, α)`, vanishes like `α − x` at `α`, and has bounded
+derivative:
+`∫₀^α f'' w = −f'(0) α^{1−s} − f(0)(1 − s)α^{−s} + ∫₀^α f w''`, with
+`w'' = −s(1 − s)(α − x)^{−s−1}`. -/
+theorem stripWeight_ibp {α s : ℝ} (hα : 0 < α) (hs0 : 0 ≤ s) (hs1 : s < 1) {f f' f'' : ℝ → ℝ}
+    (hf : ∀ x ∈ Ico 0 α, HasDerivAt f (f' x) x) (hf' : ∀ x ∈ Ico 0 α, HasDerivAt f' (f'' x) x)
+    (hc'' : ContinuousOn f'' (Ico 0 α)) {C : ℝ}
+    (hfC : ∀ x ∈ Ico 0 α, |f x| ≤ C * (α - x)) (hf'C : ∀ x ∈ Ico 0 α, |f' x| ≤ C)
+    (hint : IntervalIntegrable (fun x ↦ f'' x * (α - x) ^ (1 - s)) MeasureTheory.volume 0 α) :
+    ∫ x in (0 : ℝ)..α, f'' x * (α - x) ^ (1 - s) =
+      -(f' 0 * α ^ (1 - s)) - f 0 * ((1 - s) * α ^ (-s)) +
+        ∫ x in (0 : ℝ)..α, f x * (-(s * (1 - s) * (α - x) ^ (-s - 1))) := by
+  have hs1' : 0 < 1 - s := by linarith
+  have hC : 0 ≤ C := le_trans (abs_nonneg _) (hf'C 0 ⟨le_rfl, hα⟩)
+  -- integrability of `f w''`, dominated by `C s (1 − s) (α − x)^{−s}`
+  have hint2 : IntervalIntegrable (fun x ↦ f x * (-(s * (1 - s) * (α - x) ^ (-s - 1))))
+      MeasureTheory.volume 0 α := by
+    have hg := (intervalIntegrable_stripWeight_neg (α := α) hs1).const_mul (C * (s * (1 - s)))
+    refine hg.mono_fun' ?_ ?_
+    · rw [uIoc_of_le hα.le, MeasureTheory.Measure.restrict_congr_set MeasureTheory.Ioo_ae_eq_Ioc.symm]
+      refine ContinuousOn.aestronglyMeasurable ?_ measurableSet_Ioo
+      intro x hx
+      have hx' : α - x ≠ 0 := by linarith [hx.2]
+      have hfx : ContinuousAt f x := (hf x ⟨hx.1.le, hx.2⟩).continuousAt
+      exact (hfx.mul (((continuousAt_const.sub continuousAt_id).rpow_const
+        (Or.inl hx')).const_mul (s * (1 - s))).neg).continuousWithinAt
+    · rw [uIoc_of_le hα.le, MeasureTheory.Measure.restrict_congr_set MeasureTheory.Ioo_ae_eq_Ioc.symm]
+      refine (MeasureTheory.ae_restrict_mem measurableSet_Ioo).mono fun x hx ↦ ?_
+      have hpos : 0 < α - x := by linarith [hx.2]
+      have hss : 0 ≤ s * (1 - s) := mul_nonneg hs0 hs1'.le
+      have hsplit : (α - x) ^ (-s) = (α - x) * (α - x) ^ (-s - 1) := by
+        have h := Real.rpow_add hpos 1 (-s - 1)
+        rw [Real.rpow_one, show (1 : ℝ) + (-s - 1) = -s by ring] at h
+        exact h
+      have hfx := hfC x ⟨hx.1.le, hx.2⟩
+      dsimp only
+      rw [norm_mul, Real.norm_eq_abs, norm_neg, Real.norm_eq_abs,
+        abs_of_nonneg (mul_nonneg hss (Real.rpow_nonneg hpos.le _)), hsplit]
+      have hw : 0 ≤ (α - x) ^ (-s - 1) := Real.rpow_nonneg hpos.le _
+      calc |f x| * (s * (1 - s) * (α - x) ^ (-s - 1)) ≤ C * (α - x) * (s * (1 - s) * (α - x) ^ (-s - 1)) :=
+            mul_le_mul_of_nonneg_right hfx (mul_nonneg hss hw)
+        _ = C * (s * (1 - s)) * ((α - x) * (α - x) ^ (-s - 1)) := by ring
+  -- the finite identity for `b ∈ [0, α)`
+  have hfin : ∀ b ∈ Ico 0 α, ∫ x in (0 : ℝ)..b, f'' x * (α - x) ^ (1 - s) =
+      f' b * (α - b) ^ (1 - s) - f' 0 * α ^ (1 - s)
+        - (f b * (-((1 - s) * (α - b) ^ (-s))) - f 0 * (-((1 - s) * α ^ (-s))))
+        + ∫ x in (0 : ℝ)..b, f x * (-(s * (1 - s) * (α - x) ^ (-s - 1))) := by
+    intro b hb
+    have sub : Icc 0 b ⊆ Ico 0 α := fun x hx ↦ ⟨hx.1, lt_of_le_of_lt hx.2 hb.2⟩
+    exact stripWeight_ibp_finite hb.1 hb.2 (fun x hx ↦ hf x (sub hx)) (fun x hx ↦ hf' x (sub hx))
+      (hc''.mono sub)
+  -- limits as `b → α⁻`
+  have hprim {F : ℝ → ℝ} (hF : IntervalIntegrable F MeasureTheory.volume 0 α) :
+      Tendsto (fun b ↦ ∫ x in (0 : ℝ)..b, F x) (𝓝[<] α) (𝓝 (∫ x in (0 : ℝ)..α, F x)) := by
+    have hc := intervalIntegral.continuousOn_primitive_interval (μ := MeasureTheory.volume)
+      (a := 0) (b := α) (f := F) (by
+        rw [uIcc_of_le hα.le]
+        exact (intervalIntegrable_iff_integrableOn_Icc_of_le hα.le).mp hF)
+    have hα' : α ∈ uIcc 0 α := right_mem_uIcc
+    have := (hc α hα').tendsto
+    rw [← nhdsWithin_Ioo_eq_nhdsLT hα]
+    refine this.mono_left (nhdsWithin_mono _ ?_)
+    rw [uIcc_of_le hα.le]
+    exact Ioo_subset_Icc_self
+  have hev : ∀ᶠ b in 𝓝[<] α, b ∈ Ico 0 α :=
+    Filter.mem_of_superset (Ioo_mem_nhdsLT hα) Ioo_subset_Ico_self
+  have hevpos : ∀ᶠ b in 𝓝[<] α, b ∈ Ioo 0 α := Ioo_mem_nhdsLT hα
+  have hw0 := tendsto_stripWeight_zero (α := α) hs1'
+  have hlim1 : Tendsto (fun b ↦ f' b * (α - b) ^ (1 - s)) (𝓝[<] α) (𝓝 0) := by
+    have hb : Tendsto (fun b ↦ C * (α - b) ^ (1 - s)) (𝓝[<] α) (𝓝 0) := by
+      simpa using hw0.const_mul C
+    refine squeeze_zero_norm' ?_ hb
+    filter_upwards [hevpos] with b hb'
+    have hpos : 0 < α - b := by linarith [hb'.2]
+    rw [norm_mul, Real.norm_eq_abs, Real.norm_eq_abs, abs_of_nonneg (Real.rpow_nonneg hpos.le _)]
+    exact mul_le_mul_of_nonneg_right (hf'C b ⟨hb'.1.le, hb'.2⟩) (Real.rpow_nonneg hpos.le _)
+  have hlim2 : Tendsto (fun b ↦ f b * (-((1 - s) * (α - b) ^ (-s)))) (𝓝[<] α) (𝓝 0) := by
+    have hb : Tendsto (fun b ↦ C * (1 - s) * (α - b) ^ (1 - s)) (𝓝[<] α) (𝓝 0) := by
+      simpa using hw0.const_mul (C * (1 - s))
+    refine squeeze_zero_norm' ?_ hb
+    filter_upwards [hevpos] with b hb'
+    have hpos : 0 < α - b := by linarith [hb'.2]
+    have hsplit : (α - b) ^ (1 - s) = (α - b) * (α - b) ^ (-s) := by
+      have h := Real.rpow_add hpos 1 (-s)
+      rw [Real.rpow_one, show (1 : ℝ) + -s = 1 - s by ring] at h
+      exact h
+    rw [norm_mul, Real.norm_eq_abs, norm_neg, Real.norm_eq_abs,
+      abs_of_nonneg (mul_nonneg hs1'.le (Real.rpow_nonneg hpos.le _)), hsplit]
+    calc |f b| * ((1 - s) * (α - b) ^ (-s)) ≤ C * (α - b) * ((1 - s) * (α - b) ^ (-s)) :=
+          mul_le_mul_of_nonneg_right (hfC b ⟨hb'.1.le, hb'.2⟩)
+            (mul_nonneg hs1'.le (Real.rpow_nonneg hpos.le _))
+      _ = C * (1 - s) * ((α - b) * (α - b) ^ (-s)) := by ring
+  have hR : Tendsto (fun b ↦ f' b * (α - b) ^ (1 - s) - f' 0 * α ^ (1 - s)
+        - (f b * (-((1 - s) * (α - b) ^ (-s))) - f 0 * (-((1 - s) * α ^ (-s))))
+        + ∫ x in (0 : ℝ)..b, f x * (-(s * (1 - s) * (α - x) ^ (-s - 1)))) (𝓝[<] α)
+      (𝓝 (0 - f' 0 * α ^ (1 - s) - (0 - f 0 * (-((1 - s) * α ^ (-s))))
+        + ∫ x in (0 : ℝ)..α, f x * (-(s * (1 - s) * (α - x) ^ (-s - 1))))) :=
+    (((hlim1.sub_const _).sub (hlim2.sub_const _)).add (hprim hint2))
+  have hL := hprim hint
+  have heq := tendsto_nhds_unique (hL.congr' (Filter.eventuallyEq_of_mem hev hfin)) hR
+  rw [heq]
+  ring
 
 end RiemannMasullo
