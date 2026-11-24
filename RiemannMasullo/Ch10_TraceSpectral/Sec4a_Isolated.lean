@@ -57,19 +57,6 @@ theorem spectralStripConvolution_nuclear_of_zero_width (hwidth : α = 0) (hs₁ 
     exact (nuclearEndomorphisms _).zero_mem
   exact line (-0) ((neg_nonpos.mpr hα).trans hα) neg_zero
 
-/-- Paper: Theorem 10.4.2.1, p. 459, equation (10.4.2.5). Every compactly supported
-Bruhat test acts by a nuclear convolution operator on the strip quotient.
-Deviation: The theorems of §10.4.2 print `s ≥ 0`, while p. 455 assumes `s > 1` for
-the section. This statement covers `0 ≤ s ≤ 1`.
-Gap: The strip theorem 10.3.2.1 requires `s > 1`. At the orders considered here,
-`spectralStripConvolution_nuclear_of_zero_width` settles width zero, leaving nuclearity
-open for positive width. Nothing in the Lean uses this statement, and it is not known how
-it connects with the rest of the proof in Lean; in the paper it is used on pp. 459–461,
-463–464, 503, 519–520. -/
-theorem spectralStripConvolution_nuclear_of_le_one (_hs₁ : s ≤ 1) (φ : BruhatCompactSupport C𝔽) :
-    IsNuclearOperator (E := H₀) (F := H₀) (Aq(φ)) := by
-  sorry
-
 /-- Classical input: the Dixmier–Malliavin factorization theorem. Every compactly supported
 Bruhat test on the idele class group is a finite sum of convolutions of two such tests, for
 the Tamagawa Haar measure. J. Dixmier and P. Malliavin, *Factorisations de fonctions et de
@@ -84,16 +71,19 @@ theorem bruhatCompactSupport_convolution_factorization (φ : BruhatCompactSuppor
       ∃ u v : BruhatCompactSupport C𝔽, θ.val = lcaConvolution μ𝔽 u.val v.val} := by
   sorry
 
-/-- Paper: Theorem 10.4.2.1, p. 459, at order `s = 0`. Every compactly supported Bruhat test
-acts on the strip quotient by a Hilbert–Schmidt operator.
-Reconstruction: The paper does not state this. It is the estimate of the route posted on
-#7405: after the Mellin transform each angular component of the quotient is a model space
-`H²(S) ⊖ B H²(S)` of the strip `S = {|Re z| < α}` (the theta closure is the common kernel of
-the jets at the zeros in the open strip, `spectralStripJet_commonKernel`, and at order zero
-no boundary jet survives). The Malmquist–Takenaka basis of the model space, harmonic measure
-and the count of zeros with multiplicity bound the Hilbert–Schmidt norm. Not proved in Lean:
-the library has no Hardy space of the strip. -/
-theorem spectralStripConvolution_hilbertSchmidt_of_order_zero (_hs0 : s = 0)
+/-- Paper: Theorem 10.4.2.1, p. 459, at orders `0 ≤ s ≤ 1`. Every compactly supported Bruhat
+test acts on the strip quotient by a Hilbert–Schmidt operator.
+Reconstruction: The paper does not state this. It is the estimate of the argument posted on
+#7405 for the whole range. After the Mellin transform, each angular component of the quotient
+is `D_s ⊖ V` for an equivalent norm `∫_{∂S} |F|² + ∬_S |F'|² (α − |σ|)^{1−s}` on the strip
+`S = {|Re z| < α}`, where `V` is the space of functions that vanish at the zeros in the open
+strip. That identification is `spectralStripJet_commonKernel`; at `s ≤ 1` no boundary jet
+survives. A Carleson formula with a positive measure for finite Blaschke products gives an
+orthonormal basis `B_{n−1} g_n` of `D_s ⊖ V`. A positivity bound for the normalized kernels
+`g_n`, uniform in the measure, gives `‖Φ g_n‖² ≪ (1 + (Im ρ_n)²)^{−M}`, and the count of zeros
+with multiplicity makes the sum converge. Not proved in Lean: the library has no Hardy or
+Dirichlet-type space of the strip. -/
+theorem spectralStripConvolution_hilbertSchmidt_of_le_one (_hs₁ : s ≤ 1)
     (φ : BruhatCompactSupport C𝔽) : Aq(φ) ∈ hilbertSchmidtOperators H₀ H₀ := by
   sorry
 
@@ -111,15 +101,18 @@ private theorem spectralConvolution_lcaConvolution (θ u v : BruhatCompactSuppor
   rw [spectralConvolution_mkQ, spectralConvolution_mkQ, spectralConvolution_mkQ]
   exact congrArg _ (hact x)
 
-/-- Paper: Theorem 10.4.2.1, p. 459, equation (10.4.2.5), at order `s = 0`. Every compactly
-supported Bruhat test acts by a nuclear convolution operator on the strip quotient.
-Deviation: This is the case `s = 0` of `spectralStripConvolution_nuclear_of_le_one`, for every
-width. It follows from the Hilbert–Schmidt estimate
-`spectralStripConvolution_hilbertSchmidt_of_order_zero` and the Dixmier–Malliavin
-factorization `bruhatCompactSupport_convolution_factorization`, since a product of two
-Hilbert–Schmidt operators is nuclear. -/
-theorem spectralStripConvolution_nuclear_of_order_zero (hs0 : s = 0)
-    (φ : BruhatCompactSupport C𝔽) : IsNuclearOperator (E := H₀) (F := H₀) (Aq(φ)) := by
+/-- Paper: Theorem 10.4.2.1, p. 459, equation (10.4.2.5). Every compactly supported
+Bruhat test acts by a nuclear convolution operator on the strip quotient.
+Deviation: The theorems of §10.4.2 print `s ≥ 0`, while p. 455 assumes `s > 1` for
+the section. This statement covers `0 ≤ s ≤ 1`.
+Proved from the Hilbert–Schmidt statement `spectralStripConvolution_hilbertSchmidt_of_le_one`
+and the Dixmier–Malliavin factorization `bruhatCompactSupport_convolution_factorization`: a
+product of two Hilbert–Schmidt operators is nuclear. At width zero the statement is also
+`spectralStripConvolution_nuclear_of_zero_width`. Nothing in the Lean uses this statement, and
+it is not known how it connects with the rest of the proof in Lean; in the paper it is used on
+pp. 459–461, 463–464, 503, 519–520. -/
+theorem spectralStripConvolution_nuclear_of_le_one (_hs₁ : s ≤ 1) (φ : BruhatCompactSupport C𝔽) :
+    IsNuclearOperator (E := H₀) (F := H₀) (Aq(φ)) := by
   have hlin := spectralConvolution_isLinear (F := F) a hI hs
   induction bruhatCompactSupport_convolution_factorization φ using
     AddSubmonoid.closure_induction with
@@ -127,8 +120,8 @@ theorem spectralStripConvolution_nuclear_of_order_zero (hs0 : s = 0)
     obtain ⟨u, v, huv⟩ := h
     rw [spectralConvolution_lcaConvolution a hα hs θ u v huv]
     exact nuclear_hilbertSchmidt_comp
-      ⟨_, spectralStripConvolution_hilbertSchmidt_of_order_zero a hα hs hs0 u⟩
-      ⟨_, spectralStripConvolution_hilbertSchmidt_of_order_zero a hα hs hs0 v⟩
+      ⟨_, spectralStripConvolution_hilbertSchmidt_of_le_one a hα hs _hs₁ u⟩
+      ⟨_, spectralStripConvolution_hilbertSchmidt_of_le_one a hα hs _hs₁ v⟩
   | zero =>
     rw [hlin.map_zero]
     exact (nuclearEndomorphisms _).zero_mem
