@@ -6,6 +6,8 @@ public import Mathlib.Analysis.InnerProductSpace.Calculus
 public import Mathlib.MeasureTheory.Integral.IntervalIntegral.IntegrationByParts
 public import Mathlib.Analysis.SpecialFunctions.Pow.Deriv
 public import Mathlib.Analysis.SpecialFunctions.Integrability.Basic
+public import Mathlib.MeasureTheory.Integral.IntegralEqImproper
+public import Mathlib.MeasureTheory.Integral.Prod
 import Mathlib.MeasureTheory.Integral.DominatedConvergence
 import Mathlib.Analysis.Complex.RealDeriv
 public import RiemannMasullo.ForMathlib.Analysis.Complex.Blaschke
@@ -878,5 +880,131 @@ theorem hasDerivAt_im_line_normSq (hh : DifferentiableOn ℂ h U) (hU : IsOpen U
   ring
 
 end Lines
+
+/-! ### Carleson's formula on the strip -/
+
+section Carleson
+
+variable {h : ℂ → ℂ} {U : Set ℂ}
+
+/-- **The vertical term integrates to zero.** If the first vertical derivative of `‖h‖²` tends to
+`0` at both ends of a vertical line and the second is integrable, the second integrates to `0`. -/
+theorem integral_im_line_secondDeriv_eq_zero (hh : DifferentiableOn ℂ h U) (hU : IsOpen U) {σ : ℝ}
+    (hline : ∀ t : ℝ, (σ : ℂ) + t * I ∈ U)
+    (hint : MeasureTheory.Integrable fun t : ℝ ↦
+      2 * ‖deriv h (σ + t * I)‖ ^ 2 - 2 * inner ℝ (h (σ + t * I)) (deriv (deriv h) (σ + t * I)))
+    (hbot : Tendsto (fun t : ℝ ↦ 2 * inner ℝ (h (σ + t * I)) (deriv h (σ + t * I) * I)) atBot (𝓝 0))
+    (htop : Tendsto (fun t : ℝ ↦ 2 * inner ℝ (h (σ + t * I)) (deriv h (σ + t * I) * I)) atTop (𝓝 0)) :
+    ∫ t : ℝ, (2 * ‖deriv h (σ + t * I)‖ ^ 2 -
+      2 * inner ℝ (h (σ + t * I)) (deriv (deriv h) (σ + t * I))) = 0 := by
+  have := MeasureTheory.integral_of_hasDerivAt_of_tendsto
+    (fun t ↦ (hasDerivAt_im_line_normSq hh hU (hline t)).2) hint hbot htop
+  simpa using this
+
+end Carleson
+
+/-- **Carleson's formula on the strip, with the weight `(α − |σ|)^{1−s}`.** Let `B` be bounded by
+one on the open strip `S = {|Re z| < α}`, with defect `1 − ‖B‖² ≤ C (α − |Re z|)`, `‖B'‖ ≤ C` and
+`‖B''‖ ≤ C/(α − |Re z|)`, and let `g`, `g'`, `g''` decay like `1/(1 + t²)`. Then
+`∬ (‖(Bg)'‖² − ‖g'‖²) w = ½(1 − s)α^{−s} ∫ (1 − ‖B(it)‖²)‖g(it)‖² dt
+  + ¼ s(1 − s) ∬ (1 − ‖B‖²)‖g‖² (α − |σ|)^{−s−1}`. -/
+theorem stripCarleson {α s : ℝ} (hα : 0 < α) (hs0 : 0 ≤ s) (hs1 : s < 1) {B g : ℂ → ℂ}
+    (hB : DifferentiableOn ℂ B {z : ℂ | |z.re| < α}) (hg : DifferentiableOn ℂ g {z : ℂ | |z.re| < α})
+    {C M : ℝ}
+    (hB0 : ∀ z : ℂ, |z.re| < α → ‖B z‖ ≤ 1)
+    (hBd : ∀ z : ℂ, |z.re| < α → 1 - ‖B z‖ ^ 2 ≤ C * (α - |z.re|))
+    (hB1 : ∀ z : ℂ, |z.re| < α → ‖deriv B z‖ ≤ C)
+    (hB2 : ∀ z : ℂ, |z.re| < α → ‖deriv (deriv B) z‖ ≤ C / (α - |z.re|))
+    (hg0 : ∀ z : ℂ, |z.re| < α → ‖g z‖ ≤ M / (1 + z.im ^ 2))
+    (hg1 : ∀ z : ℂ, |z.re| < α → ‖deriv g z‖ ≤ M / (1 + z.im ^ 2))
+    (hg2 : ∀ z : ℂ, |z.re| < α → ‖deriv (deriv g) z‖ ≤ M / (1 + z.im ^ 2)) :
+    ∫ σ in (-α)..α, (∫ t : ℝ, (‖deriv (fun z ↦ B z * g z) (σ + t * I)‖ ^ 2 -
+        ‖deriv g (σ + t * I)‖ ^ 2)) * (α - |σ|) ^ (1 - s) =
+      (1 - s) / 2 * α ^ (-s) * (∫ t : ℝ, (1 - ‖B (t * I)‖ ^ 2) * ‖g (t * I)‖ ^ 2) +
+        s * (1 - s) / 4 * ∫ σ in (-α)..α,
+          (∫ t : ℝ, (1 - ‖B (σ + t * I)‖ ^ 2) * ‖g (σ + t * I)‖ ^ 2) * (α - |σ|) ^ (-s - 1) := by
+  set H : ℂ → ℂ := fun z ↦ B z * g z with hH
+  -- the pointwise quantities on the line through `σ + t I`
+  let Ph (h : ℂ → ℂ) (σ t : ℝ) : ℝ := 2 * ‖deriv h (σ + t * I)‖ ^ 2 +
+    2 * inner ℝ (h (σ + t * I)) (deriv (deriv h) (σ + t * I))
+  let Qh (h : ℂ → ℂ) (σ t : ℝ) : ℝ := 2 * ‖deriv h (σ + t * I)‖ ^ 2 -
+    2 * inner ℝ (h (σ + t * I)) (deriv (deriv h) (σ + t * I))
+  let P (σ t : ℝ) : ℝ := Ph H σ t - Ph g σ t
+  let Q (σ t : ℝ) : ℝ := Qh H σ t - Qh g σ t
+  let E (σ t : ℝ) : ℝ := ‖deriv H (σ + t * I)‖ ^ 2 - ‖deriv g (σ + t * I)‖ ^ 2
+  let u (σ t : ℝ) : ℝ := ‖H (σ + t * I)‖ ^ 2 - ‖g (σ + t * I)‖ ^ 2
+  let w (σ : ℝ) : ℝ := (α - |σ|) ^ (1 - s)
+  let w₂ (σ : ℝ) : ℝ := -(s * (1 - s) * (α - |σ|) ^ (-s - 1))
+  have hE (σ t : ℝ) : E σ t = (P σ t + Q σ t) / 4 := by
+    simp only [E, P, Q, Ph, Qh]
+    ring
+  have hu (σ t : ℝ) : u σ t = -((1 - ‖B (σ + t * I)‖ ^ 2) * ‖g (σ + t * I)‖ ^ 2) := by
+    simp only [u, hH, norm_mul, mul_pow]
+    ring
+  -- (a) on every vertical line the second vertical derivative integrates to zero
+  have hQ : ∀ σ ∈ Ioo (-α) α, ∫ t : ℝ, Q σ t = 0 := by
+    sorry
+  -- integrability in `t` of `P` and `Q` on every vertical line
+  have hPi : ∀ σ ∈ Ioo (-α) α, MeasureTheory.Integrable (P σ) := by
+    sorry
+  have hQi : ∀ σ ∈ Ioo (-α) α, MeasureTheory.Integrable (Q σ) := by
+    sorry
+  -- (b) hence `∫ E = ¼ ∫ P` on every vertical line
+  have hEP : ∀ σ ∈ Ioo (-α) α, ∫ t : ℝ, E σ t = (∫ t : ℝ, P σ t) / 4 := by
+    intro σ hσ
+    simp_rw [hE]
+    rw [MeasureTheory.integral_div, MeasureTheory.integral_add (hPi σ hσ) (hQi σ hσ), hQ σ hσ,
+      add_zero]
+  -- (c) integration by parts in `σ` on every horizontal line
+  have hIBP : ∀ t : ℝ, ∫ σ in (-α)..α, P σ t * w σ =
+      -(2 * u 0 t * ((1 - s) * α ^ (-s))) + ∫ σ in (-α)..α, u σ t * w₂ σ := by
+    sorry
+  -- (d), (e) Fubini
+  have hF1 : ∫ σ in (-α)..α, (∫ t : ℝ, P σ t) * w σ = ∫ t : ℝ, ∫ σ in (-α)..α, P σ t * w σ := by
+    sorry
+  have hF2 : ∫ t : ℝ, ∫ σ in (-α)..α, u σ t * w₂ σ = ∫ σ in (-α)..α, (∫ t : ℝ, u σ t) * w₂ σ := by
+    sorry
+  -- (f) integrability in `t` of the two terms on the right
+  have hK : MeasureTheory.Integrable fun t : ℝ ↦ -(2 * u 0 t * ((1 - s) * α ^ (-s))) := by
+    sorry
+  have hU : MeasureTheory.Integrable fun t : ℝ ↦ ∫ σ in (-α)..α, u σ t * w₂ σ := by
+    sorry
+  -- assembly
+  have hL : ∫ σ in (-α)..α, (∫ t : ℝ, E σ t) * w σ = ∫ σ in (-α)..α, (∫ t : ℝ, P σ t) * w σ / 4 := by
+    apply intervalIntegral.integral_congr_ae
+    refine Filter.Eventually.of_forall fun σ hσ ↦ ?_
+    rw [uIoc_of_le (by linarith)] at hσ
+    sorry
+  have hstep : ∫ σ in (-α)..α, (∫ t : ℝ, E σ t) * w σ =
+      (2 * ((1 - s) * α ^ (-s)) * (∫ t : ℝ, (1 - ‖B (t * I)‖ ^ 2) * ‖g (t * I)‖ ^ 2) +
+        s * (1 - s) * ∫ σ in (-α)..α,
+          (∫ t : ℝ, (1 - ‖B (σ + t * I)‖ ^ 2) * ‖g (σ + t * I)‖ ^ 2) * (α - |σ|) ^ (-s - 1)) / 4 := by
+    have h1 : ∫ t : ℝ, -(2 * u 0 t * ((1 - s) * α ^ (-s))) =
+        2 * ((1 - s) * α ^ (-s)) * ∫ t : ℝ, (1 - ‖B (t * I)‖ ^ 2) * ‖g (t * I)‖ ^ 2 := by
+      have : (fun t : ℝ ↦ -(2 * u 0 t * ((1 - s) * α ^ (-s)))) =
+          fun t : ℝ ↦ 2 * ((1 - s) * α ^ (-s)) * ((1 - ‖B (t * I)‖ ^ 2) * ‖g (t * I)‖ ^ 2) := by
+        funext t
+        rw [hu]
+        simp only [Complex.ofReal_zero, zero_add]
+        ring
+      rw [this, MeasureTheory.integral_const_mul]
+    have h2 : ∫ σ in (-α)..α, (∫ t : ℝ, u σ t) * w₂ σ = s * (1 - s) * ∫ σ in (-α)..α,
+        (∫ t : ℝ, (1 - ‖B (σ + t * I)‖ ^ 2) * ‖g (σ + t * I)‖ ^ 2) * (α - |σ|) ^ (-s - 1) := by
+      rw [← intervalIntegral.integral_const_mul]
+      apply intervalIntegral.integral_congr
+      intro σ _
+      have : ∫ t : ℝ, u σ t = -∫ t : ℝ, (1 - ‖B (σ + t * I)‖ ^ 2) * ‖g (σ + t * I)‖ ^ 2 := by
+        simp_rw [hu]
+        exact MeasureTheory.integral_neg _
+      simp only [w₂]
+      rw [this]
+      ring
+    rw [hL, intervalIntegral.integral_div, hF1,
+      MeasureTheory.integral_congr_ae (Filter.Eventually.of_forall hIBP),
+      MeasureTheory.integral_add hK hU, hF2, h1, h2]
+  have hfin := hstep
+  simp only [E, w] at hfin
+  rw [hfin]
+  ring
 
 end RiemannMasullo
