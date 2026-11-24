@@ -1,6 +1,7 @@
 module
 
 public import Mathlib.Analysis.Complex.CauchyIntegral
+public import Mathlib.Analysis.Complex.Liouville
 public import Mathlib.Analysis.InnerProductSpace.Calculus
 public import Mathlib.MeasureTheory.Integral.IntervalIntegral.IntegrationByParts
 public import Mathlib.Analysis.SpecialFunctions.Pow.Deriv
@@ -18,7 +19,7 @@ one-variable derivatives, in the form used for Carleson's formula on a vertical 
 
 public section
 
-open Complex Set Filter
+open Complex Set Filter Metric
 open scoped Topology Real Interval
 
 namespace RiemannMasullo
@@ -782,5 +783,41 @@ theorem stripWeight_ibp_symm {α s : ℝ} (hα : 0 < α) (hs0 : 0 ≤ s) (hs1 : 
     ← intervalIntegral.integral_add_adjacent_intervals iG_L iG_R, cF, cG, rF, rG, hR, hL]
   simp only [neg_zero]
   ring
+
+/-- The open strip `{|Re w| < α}` is open. -/
+theorem isOpen_strip (α : ℝ) : IsOpen {w : ℂ | |w.re| < α} :=
+  isOpen_lt (continuous_abs.comp Complex.continuous_re) continuous_const
+
+/-- **A Cauchy estimate for the second derivative.** On the open strip,
+`‖B''(w)‖ ≤ C / (α − |Re w|)`. -/
+theorem stripBlaschke_deriv2_bound {α : ℝ} (hα : 0 < α) {n : ℕ} (ρ : Fin n → ℂ)
+    (hρ : ∀ j, |(ρ j).re| < α) :
+    ∃ C : ℝ, 0 ≤ C ∧ ∀ w : ℂ, |w.re| < α →
+      ‖deriv (deriv (stripBlaschke α ρ)) w‖ ≤ C / (α - |w.re|) := by
+  obtain ⟨C, hC0, hC⟩ := stripBlaschke_deriv_bound hα ρ hρ
+  have hd : DifferentiableOn ℂ (stripBlaschke α ρ) {w : ℂ | |w.re| < α} := fun w hw ↦
+    (hC w hw).1.differentiableWithinAt
+  have hd' : DifferentiableOn ℂ (deriv (stripBlaschke α ρ)) {w : ℂ | |w.re| < α} :=
+    hd.deriv (isOpen_strip α)
+  refine ⟨2 * C, by positivity, fun w hw ↦ ?_⟩
+  set r := (α - |w.re|) / 2 with hr
+  have hr0 : 0 < r := by rw [hr]; linarith
+  have hball : closedBall w r ⊆ {w : ℂ | |w.re| < α} := by
+    intro z hz
+    have h1 : |z.re - w.re| ≤ r := by
+      calc |z.re - w.re| = |(z - w).re| := by rw [Complex.sub_re]
+        _ ≤ ‖z - w‖ := Complex.abs_re_le_norm _
+        _ ≤ r := by simpa [dist_eq_norm] using hz
+    have h2 : |z.re| ≤ |w.re| + r := by
+      have := abs_sub_abs_le_abs_sub z.re w.re
+      linarith
+    show |z.re| < α
+    linarith
+  have hcl : DiffContOnCl ℂ (deriv (stripBlaschke α ρ)) (ball w r) :=
+    (hd'.mono ((closure_ball w hr0.ne').subset.trans hball)).diffContOnCl
+  have hest := Complex.norm_deriv_le_of_forall_mem_sphere_norm_le hr0 hcl
+    (fun z hz ↦ (hC z (hball (sphere_subset_closedBall hz))).2)
+  calc ‖deriv (deriv (stripBlaschke α ρ)) w‖ ≤ C / r := hest
+    _ = 2 * C / (α - |w.re|) := by rw [hr]; field_simp
 
 end RiemannMasullo
